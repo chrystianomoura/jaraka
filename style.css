@@ -4,8 +4,13 @@
   --color-board-border: #ff3d9a;
   --color-grid: rgba(75, 123, 255, 0.11);
 
+  --color-verdyka: #39ff6a;
+  --color-verdyka-highlight: #8cff63;
+  --color-verdyka-shadow: #13c94d;
+
   --page-padding: 24px;
   --board-size: min(78vw, 78vh, 760px);
+  --cell-size: calc(var(--board-size) / 24);
 }
 
 *,
@@ -43,19 +48,336 @@ body {
 }
 
 .game-board {
+  position: relative;
+
   width: var(--board-size);
   aspect-ratio: 1;
+
+  overflow: hidden;
 
   background-color: var(--color-board);
 
   background-image:
-    linear-gradient(to right, var(--color-grid) 1px, transparent 1px),
-    linear-gradient(to bottom, var(--color-grid) 1px, transparent 1px);
+    linear-gradient(
+      to right,
+      var(--color-grid) 1px,
+      transparent 1px
+    ),
+    linear-gradient(
+      to bottom,
+      var(--color-grid) 1px,
+      transparent 1px
+    );
 
-  background-size: calc(100% / 24) calc(100% / 24);
+  background-size:
+    calc(100% / 24) calc(100% / 24);
 
   border: 2px solid var(--color-board-border);
   border-radius: 22px;
+}
 
-  overflow: hidden;
+.snake-layer {
+  position: absolute;
+  inset: 0;
+}
+
+/* =========================================================
+   POSIÇÃO VISUAL
+   ========================================================= */
+
+.snake-part {
+  position: absolute;
+
+  --part-size: 0.92;
+
+  --part-offset: calc(
+    (1 - var(--part-size)) * var(--cell-size) / 2
+  );
+
+  width: calc(
+    var(--cell-size) * var(--part-size)
+  );
+
+  height: calc(
+    var(--cell-size) * var(--part-size)
+  );
+
+  transform:
+    translate3d(
+      calc(
+        var(--visual-x) * var(--cell-size) +
+        var(--part-offset)
+      ),
+      calc(
+        var(--visual-y) * var(--cell-size) +
+        var(--part-offset)
+      ),
+      0
+    );
+
+  will-change: transform;
+
+  backface-visibility: hidden;
+}
+
+/* =========================================================
+   CORPO
+   ========================================================= */
+
+.snake-core {
+  position: relative;
+
+  width: 100%;
+  height: 100%;
+
+  overflow: visible;
+
+  border-radius: 30%;
+
+  background:
+    linear-gradient(
+      145deg,
+      var(--color-verdyka-highlight) 0%,
+      var(--color-verdyka) 42%,
+      var(--color-verdyka-shadow) 100%
+    );
+
+  box-shadow:
+    0 0 7px rgba(57, 255, 106, 0.28),
+    0 0 14px rgba(57, 255, 106, 0.12);
+
+  transform: scale(1);
+
+  transform-origin: 50% 50%;
+
+  transition:
+    transform 110ms ease-out,
+    border-radius 110ms ease-out;
+
+  will-change: transform;
+}
+
+.snake-core::before {
+  content: "";
+
+  position: absolute;
+
+  top: 12%;
+  left: 16%;
+
+  width: 44%;
+  height: 16%;
+
+  border-radius: 999px;
+
+  background: rgba(255, 255, 255, 0.28);
+
+  filter: blur(0.4px);
+}
+
+/* =========================================================
+   FORMATO DOS SEGMENTOS
+   ========================================================= */
+
+.snake-core.is-horizontal {
+  transform:
+    scale(1.025, 0.975);
+}
+
+.snake-core.is-vertical {
+  transform:
+    scale(0.975, 1.025);
+}
+
+.snake-core.is-corner {
+  transform:
+    scale(1.035);
+
+  border-radius: 35%;
+}
+
+/* =========================================================
+   CABEÇA
+   ========================================================= */
+
+.snake-head {
+  --part-size: 1.08;
+
+  z-index: 10;
+}
+
+.snake-head .snake-core {
+  border-radius: 32%;
+
+  transform-origin: 50% 50%;
+
+  box-shadow:
+    0 0 8px rgba(57, 255, 106, 0.32),
+    0 0 16px rgba(57, 255, 106, 0.13);
+}
+
+.snake-head .snake-core.is-horizontal {
+  transform:
+    scale(1.045, 0.975);
+}
+
+.snake-head .snake-core.is-vertical {
+  transform:
+    scale(0.975, 1.045);
+}
+
+/* =========================================================
+   ANIMAÇÃO DA CURVA
+   ========================================================= */
+
+.snake-head .snake-core.is-turning {
+  animation:
+    head-turn 130ms ease-out;
+}
+
+@keyframes head-turn {
+  0% {
+    transform:
+      scale(1)
+      rotate(0deg);
+  }
+
+  45% {
+    transform:
+      scale(1.09, 0.94)
+      rotate(
+        var(--head-turn-angle, 0deg)
+      );
+  }
+
+  100% {
+    transform:
+      scale(1)
+      rotate(0deg);
+  }
+}
+
+/* =========================================================
+   SENTIDO DO GIRO
+   ========================================================= */
+
+.snake-head[data-turn="left"] {
+  --head-turn-angle: -4deg;
+}
+
+.snake-head[data-turn="right"] {
+  --head-turn-angle: 4deg;
+}
+
+/* =========================================================
+   ROSTO
+   ========================================================= */
+
+.snake-face {
+  position: absolute;
+
+  inset: 0;
+
+  z-index: 3;
+
+  transform: none;
+}
+
+/* =========================================================
+   OLHOS
+   ========================================================= */
+
+.snake-eye {
+  position: absolute;
+
+  top: 27%;
+
+  width: 19%;
+  aspect-ratio: 1;
+
+  border-radius: 50%;
+
+  background: #05060a;
+
+  transform:
+    translate3d(
+      var(--eye-x, 0),
+      var(--eye-y, 0),
+      0
+    );
+
+  transition:
+    transform 80ms ease-out;
+}
+
+.snake-eye--left {
+  left: 20%;
+}
+
+.snake-eye--right {
+  right: 20%;
+}
+
+.snake-eye::after {
+  content: "";
+
+  position: absolute;
+
+  top: 16%;
+  left: 18%;
+
+  width: 34%;
+  aspect-ratio: 1;
+
+  border-radius: 50%;
+
+  background:
+    rgba(255, 255, 255, 0.94);
+}
+
+/* =========================================================
+   BOCA
+   ========================================================= */
+
+.snake-mouth {
+  position: absolute;
+
+  left: 50%;
+  bottom: 19%;
+
+  width: 30%;
+  height: 16%;
+
+  transform:
+    translateX(-50%);
+
+  border-bottom:
+    2.5px solid #05060a;
+
+  border-radius:
+    0 0 999px 999px;
+}
+
+/* =========================================================
+   OLHAR DIRECIONAL
+   ========================================================= */
+
+.snake-head[data-direction="right"] {
+  --eye-x: 1.5px;
+  --eye-y: 0;
+}
+
+.snake-head[data-direction="left"] {
+  --eye-x: -1.5px;
+  --eye-y: 0;
+}
+
+.snake-head[data-direction="up"] {
+  --eye-x: 0;
+  --eye-y: -1.5px;
+}
+
+.snake-head[data-direction="down"] {
+  --eye-x: 0;
+  --eye-y: 1.5px;
 }
