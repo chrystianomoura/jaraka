@@ -2,6 +2,7 @@
   --color-background: #050817;
   --color-board: #080c20;
   --color-board-border: #ff3d9a;
+  --color-grid: rgba(75, 123, 255, 0.11);
 
   --page-padding: 24px;
   --board-size: min(78vw, 78vh, 760px);
@@ -45,8 +46,16 @@ body {
   width: var(--board-size);
   aspect-ratio: 1;
 
-  background: var(--color-board);
+  background-color: var(--color-board);
+
+  background-image:
+    linear-gradient(to right, var(--color-grid) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--color-grid) 1px, transparent 1px);
+
+  background-size: calc(100% / 24) calc(100% / 24);
 
   border: 2px solid var(--color-board-border);
   border-radius: 22px;
+
+  overflow: hidden;
 }
