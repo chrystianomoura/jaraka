@@ -3,8 +3,18 @@
 const GRID_SIZE = 24;
 const MOVE_INTERVAL = 180;
 
+const MOUSE_POSITION = {
+  x: 17,
+  y: 8,
+};
+
+const MOUSE_SCARED_DISTANCE = 4;
+
 const snakeLayer =
   document.querySelector(".snake-layer");
+
+const mouseFood =
+  document.querySelector(".mouse-food");
 
 let snake = [
   { x: 12, y: 12 },
@@ -32,7 +42,8 @@ let queuedDirection = {
 
 let directionQueued = false;
 
-let lastMoveTime = performance.now();
+let lastMoveTime =
+  performance.now();
 
 const snakeElements = [];
 
@@ -90,14 +101,15 @@ function getTurnSide(
 }
 
 /* =========================================================
-   ROSTO
+   ROSTO DA COBRA
    ========================================================= */
 
 function createFace() {
   const face =
     document.createElement("div");
 
-  face.className = "snake-face";
+  face.className =
+    "snake-face";
 
   const leftEye =
     document.createElement("span");
@@ -156,7 +168,9 @@ function createSnake() {
         );
       }
 
-      element.appendChild(core);
+      element.appendChild(
+        core
+      );
 
       snakeLayer.appendChild(
         element
@@ -170,6 +184,12 @@ function createSnake() {
   );
 
   updateSegmentShapes();
+
+  updateHeadDirection(
+    direction
+  );
+
+  updateMouseState();
 
   renderSnake(0);
 }
@@ -362,6 +382,75 @@ function triggerHeadTurn(
 }
 
 /* =========================================================
+   DISTÂNCIA ENTRE COBRA E RATO
+   ========================================================= */
+
+function getMouseDistance() {
+  const head =
+    snake[0];
+
+  const horizontalDistance =
+    Math.abs(
+      head.x -
+      MOUSE_POSITION.x
+    );
+
+  const verticalDistance =
+    Math.abs(
+      head.y -
+      MOUSE_POSITION.y
+    );
+
+  return (
+    horizontalDistance +
+    verticalDistance
+  );
+}
+
+/* =========================================================
+   EXPRESSÃO DO RATO
+   ========================================================= */
+
+function setMouseExpression(
+  expression
+) {
+  if (!mouseFood) {
+    return;
+  }
+
+  mouseFood.classList.remove(
+    "is-normal",
+    "is-angry",
+    "is-scared",
+    "is-happy"
+  );
+
+  mouseFood.classList.add(
+    `is-${expression}`
+  );
+}
+
+function updateMouseState() {
+  const distance =
+    getMouseDistance();
+
+  if (
+    distance <=
+    MOUSE_SCARED_DISTANCE
+  ) {
+    setMouseExpression(
+      "scared"
+    );
+
+    return;
+  }
+
+  setMouseExpression(
+    "angry"
+  );
+}
+
+/* =========================================================
    MOVIMENTO LÓGICO
    ========================================================= */
 
@@ -415,6 +504,8 @@ function moveSnake() {
   updateHeadDirection(
     direction
   );
+
+  updateMouseState();
 }
 
 /* =========================================================
@@ -422,9 +513,6 @@ function moveSnake() {
    ========================================================= */
 
 function gameLoop(timestamp) {
-  const elapsed =
-    timestamp - lastMoveTime;
-
   while (
     timestamp - lastMoveTime >=
     MOVE_INTERVAL
@@ -442,7 +530,9 @@ function gameLoop(timestamp) {
       1
     );
 
-  renderSnake(progress);
+  renderSnake(
+    progress
+  );
 
   requestAnimationFrame(
     gameLoop
