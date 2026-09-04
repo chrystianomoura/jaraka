@@ -1,7 +1,24 @@
 /* =========================================================
-   JARAKA
-   Board
+   JARAKA — BOARD
+   Tabuleiro principal
    ========================================================= */
+
+/* =========================================================
+   SHELL
+   ========================================================= */
+
+.game-shell {
+  position: relative;
+
+  width: 100%;
+  min-height: 100svh;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  padding: 24px;
+}
 
 /* =========================================================
    TABULEIRO
@@ -10,34 +27,85 @@
 .game-board {
   position: relative;
 
+  --board-size: min(78vw, 78vh, 760px);
+
+  --cell-size: calc(var(--board-size) / 24);
+
   width: var(--board-size);
 
-  aspect-ratio: 1;
+  height: var(--board-size);
 
-  overflow: hidden;
+  flex: 0 0 auto;
+
+  border: 0;
+
+  border-radius: 22px;
 
   background-color: var(--color-board);
 
   background-image:
+    linear-gradient(to right, var(--color-grid) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--color-grid) 1px, transparent 1px),
     radial-gradient(
       circle at 0 0,
       rgba(70, 210, 255, 0.58) 1.15px,
       transparent 1.45px
-    ),
-    linear-gradient(to right, var(--color-grid) 1px, transparent 1px),
-    linear-gradient(to bottom, var(--color-grid) 1px, transparent 1px);
+    );
 
   background-size:
-    calc(100% / 24) calc(100% / 24),
-    calc(100% / 24) calc(100% / 24),
-    calc(100% / 24) calc(100% / 24);
+    var(--cell-size) var(--cell-size),
+    var(--cell-size) var(--cell-size),
+    var(--cell-size) var(--cell-size);
 
-  background-position:
-    0 0,
-    0 0,
-    0 0;
+  /*
+   * Muito importante:
+   *
+   * não cortamos os personagens
+   * nas extremidades.
+   *
+   * A cabeça da Verdyka é ligeiramente
+   * maior que uma célula.
+   */
+
+  overflow: visible;
+
+  isolation: isolate;
+}
+
+/* =========================================================
+   BORDA EXTERNA
+   ========================================================= */
+
+.game-board::after {
+  content: "";
+
+  position: absolute;
+
+  /*
+   * A borda agora fica FORA
+   * da área lógica do tabuleiro.
+   *
+   * Assim ela não invade nenhuma
+   * das 24 × 24 células.
+   */
+
+  inset: -2px;
 
   border: 2px solid var(--color-board-border);
 
-  border-radius: 22px;
+  border-radius: 24px;
+
+  pointer-events: none;
+
+  z-index: 100;
+}
+
+/* =========================================================
+   SEGURANÇA DE LAYOUT
+   ========================================================= */
+
+.game-board,
+.game-board::before,
+.game-board::after {
+  box-sizing: border-box;
 }

@@ -53,35 +53,41 @@ export function createSnakeRenderer({ layer }) {
   }
 
   /* =======================================================
-     CRIAÇÃO DOS ELEMENTOS
+     SEGMENTOS
      ======================================================= */
+
+  function createSegment(isHead = false) {
+    const element = document.createElement("div");
+
+    element.className = isHead
+      ? "snake-part snake-head"
+      : "snake-part snake-segment";
+
+    const core = document.createElement("div");
+
+    core.className = "snake-core";
+
+    if (isHead) {
+      core.appendChild(createFace());
+    }
+
+    element.appendChild(core);
+
+    layer.appendChild(element);
+
+    const entry = {
+      element,
+      core,
+    };
+
+    elements.push(entry);
+
+    return entry;
+  }
 
   function create(snake, direction) {
     snake.forEach((segment, index) => {
-      const isHead = index === 0;
-
-      const element = document.createElement("div");
-
-      element.className = isHead
-        ? "snake-part snake-head"
-        : "snake-part snake-segment";
-
-      const core = document.createElement("div");
-
-      core.className = "snake-core";
-
-      if (isHead) {
-        core.appendChild(createFace());
-      }
-
-      element.appendChild(core);
-
-      layer.appendChild(element);
-
-      elements.push({
-        element,
-        core,
-      });
+      createSegment(index === 0);
     });
 
     updateSegmentShapes(snake, direction);
@@ -89,8 +95,14 @@ export function createSnakeRenderer({ layer }) {
     updateHeadDirection(direction);
   }
 
+  function syncSegments(snake) {
+    while (elements.length < snake.length) {
+      createSegment(false);
+    }
+  }
+
   /* =======================================================
-     FORMATO DOS SEGMENTOS
+     FORMATO
      ======================================================= */
 
   function getSegmentShape(snake, direction, index) {
@@ -120,6 +132,8 @@ export function createSnakeRenderer({ layer }) {
   }
 
   function updateSegmentShapes(snake, direction) {
+    syncSegments(snake);
+
     snake.forEach((segment, index) => {
       const snakeElement = elements[index];
 
@@ -145,13 +159,11 @@ export function createSnakeRenderer({ layer }) {
     return start + (end - start) * progress;
   }
 
-  /* =======================================================
-     RENDERIZAÇÃO CONTÍNUA
-     ======================================================= */
-
   function render(snake, previousSnake, progress) {
+    syncSegments(snake);
+
     snake.forEach((segment, index) => {
-      const previous = previousSnake[index];
+      const previous = previousSnake[index] ?? segment;
 
       const snakeElement = elements[index];
 
@@ -184,7 +196,7 @@ export function createSnakeRenderer({ layer }) {
   }
 
   /* =======================================================
-     ANIMAÇÃO DE CURVA
+     CURVA
      ======================================================= */
 
   function triggerHeadTurn(turnSide) {
@@ -211,11 +223,243 @@ export function createSnakeRenderer({ layer }) {
     }, 130);
   }
 
+  /* =======================================================
+     ESTADOS DO ROSTO
+     ======================================================= */
+
+  function clearEatingFaceStates() {
+    const head = elements[0]?.element;
+
+    if (!head) {
+      return;
+    }
+
+    head.classList.remove("is-biting", "is-bite-closing", "is-chewing");
+  }
+
+  /* =======================================================
+     MORDIDA
+     ======================================================= */
+
+  function triggerBite() {
+    const head = elements[0]?.element;
+
+    if (!head) {
+      return;
+    }
+
+    clearEatingFaceStates();
+
+    void head.offsetWidth;
+
+    head.classList.add("is-biting");
+  }
+
+  function triggerBiteClose() {
+    const head = elements[0]?.element;
+
+    if (!head) {
+      return;
+    }
+
+    head.classList.add("is-bite-closing");
+  }
+
+  /* =======================================================
+     MASTIGAÇÃO
+     ======================================================= */
+
+  function triggerChew() {
+    const head = elements[0]?.element;
+
+    if (!head) {
+      return;
+    }
+
+    head.classList.remove("is-biting", "is-bite-closing", "is-chewing");
+
+    void head.offsetWidth;
+
+    head.classList.add("is-chewing");
+  }
+
+  function finishChew() {
+    const head = elements[0]?.element;
+
+    if (!head) {
+      return;
+    }
+
+    head.classList.remove("is-chewing");
+  }
+
+  function finishBite() {
+    clearEatingFaceStates();
+  }
+
+  /* =======================================================
+     DEGLUTIÇÃO — SEGMENTO
+     ======================================================= */
+
+  function triggerSwallowSegment(index) {
+    const core = elements[index]?.core;
+
+    if (!core) {
+      return;
+    }
+
+    core.classList.remove("is-swallowing");
+
+    void core.offsetWidth;
+
+    core.classList.add("is-swallowing");
+
+    window.setTimeout(() => {
+      core.classList.remove("is-swallowing");
+    }, 260);
+  }
+
+  /* =======================================================
+     DEGLUTIÇÃO — ONDA
+     ======================================================= */
+
+  function triggerSwallowWave({ segmentDelay = 92, onComplete } = {}) {
+    const bodyElements = elements.slice(1);
+
+    if (bodyElements.length === 0) {
+      onComplete?.();
+      return;
+    }
+
+    bodyElements.forEach((entry, bodyIndex) => {
+      window.setTimeout(() => {
+        triggerSwallowSegment(bodyIndex + 1);
+
+        const isLast = bodyIndex === bodyElements.length - 1;
+
+        if (isLast) {
+          window.setTimeout(() => {
+            onComplete?.();
+          }, 245);
+        }
+      }, bodyIndex * segmentDelay);
+    });
+  }
+
+  /* =======================================================
+     CRESCIMENTO
+     ======================================================= */
+
+  function triggerGrowthArrival() {
+    const lastElement = elements[elements.length - 1];
+
+    if (!lastElement) {
+      return;
+    }
+
+    const { core } = lastElement;
+
+    core.classList.remove("is-growth-arrival");
+
+    void core.offsetWidth;
+
+    core.classList.add("is-growth-arrival");
+
+    window.setTimeout(() => {
+      core.classList.remove("is-growth-arrival");
+    }, 300);
+  }
+
+  /* =======================================================
+     SEQUÊNCIA DE ALIMENTAÇÃO
+     ======================================================= */
+
+  function triggerEatingSequence({ onMouseEnter, onSwallowComplete } = {}) {
+    /*
+     * 0 ms
+     *
+     * A cabeça abre a boca.
+     */
+
+    triggerBite();
+
+    /*
+     * 115 ms
+     *
+     * O rato começa a desaparecer
+     * dentro da boca.
+     */
+
+    window.setTimeout(() => {
+      onMouseEnter?.();
+    }, 115);
+
+    /*
+     * 300 ms
+     *
+     * A boca começa a fechar.
+     */
+
+    window.setTimeout(() => {
+      triggerBiteClose();
+    }, 300);
+
+    /*
+     * 440 ms
+     *
+     * Começa a mastigação.
+     */
+
+    window.setTimeout(() => {
+      triggerChew();
+    }, 440);
+
+    /*
+     * 760 ms
+     *
+     * A digestão começa enquanto
+     * a Verdyka ainda mastiga.
+     */
+
+    window.setTimeout(() => {
+      triggerSwallowWave({
+        segmentDelay: 92,
+
+        onComplete: () => {
+          onSwallowComplete?.();
+        },
+      });
+    }, 760);
+
+    /*
+     * 1340 ms
+     *
+     * Os 900 ms de mastigação
+     * terminaram.
+     *
+     * A face retorna ao estado
+     * normal.
+     */
+
+    window.setTimeout(() => {
+      finishChew();
+    }, 1340);
+  }
+
   return {
     create,
     render,
     updateSegmentShapes,
     updateHeadDirection,
     triggerHeadTurn,
+    triggerBite,
+    triggerBiteClose,
+    triggerChew,
+    finishChew,
+    finishBite,
+    triggerSwallowSegment,
+    triggerSwallowWave,
+    triggerGrowthArrival,
+    triggerEatingSequence,
   };
 }
