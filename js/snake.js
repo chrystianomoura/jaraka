@@ -42,7 +42,7 @@ import {
 
 const SVG_NAMESPACE = "http://www.w3.org/2000/svg";
 
-const GRID_SIZE = 24;
+const GRID_SIZE = 16;
 
 export function createSnakeRenderer({ layer }) {
   let bodySvg = null;
@@ -126,21 +126,11 @@ export function createSnakeRenderer({ layer }) {
 
     latestSnakeLength = snake.length;
 
-    /*
-     * Posição visual interpolada
-     * da cabeça.
-     */
-
     const visualHead = getVisualHead(snake, previousSnake, progress);
 
     headElement.style.setProperty("--visual-x", visualHead.x);
 
     headElement.style.setProperty("--visual-y", visualHead.y);
-
-    /*
-     * Trajetória contínua
-     * do corpo.
-     */
 
     const rawPoints = buildBodyPoints(snake, previousSnake, progress);
 

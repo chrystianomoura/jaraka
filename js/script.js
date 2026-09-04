@@ -4,12 +4,12 @@ import { createInputController } from "./input.js";
 import { createMouseController } from "./mouse.js";
 import { createSnakeRenderer } from "./snake.js";
 
-const GRID_SIZE = 24;
+const GRID_SIZE = 16;
 const MOVE_INTERVAL = 180;
 
 const MOUSE_POSITION = {
-  x: 17,
-  y: 8,
+  x: 12,
+  y: 7,
 };
 
 const gameBoard = document.querySelector(".game-board");
@@ -21,12 +21,12 @@ const mouseFood = document.querySelector(".mouse-food");
 const mouseActor = mouseFood?.querySelector(".mouse-actor");
 
 let snake = [
-  { x: 12, y: 12 },
-  { x: 11, y: 12 },
-  { x: 10, y: 12 },
-  { x: 9, y: 12 },
-  { x: 8, y: 12 },
-  { x: 7, y: 12 },
+  { x: 9, y: 8 },
+  { x: 8, y: 8 },
+  { x: 7, y: 8 },
+  { x: 6, y: 8 },
+  { x: 5, y: 8 },
+  { x: 4, y: 8 },
 ];
 
 let previousSnake = snake.map((segment) => ({
@@ -75,6 +75,20 @@ function isSnakePosition(position) {
 }
 
 /* =========================================================
+   RATO — POSIÇÃO VISUAL
+   ========================================================= */
+
+function updateMousePosition() {
+  if (!mouseFood) {
+    return;
+  }
+
+  mouseFood.style.setProperty("--mouse-x", MOUSE_POSITION.x);
+
+  mouseFood.style.setProperty("--mouse-y", MOUSE_POSITION.y);
+}
+
+/* =========================================================
    RATO — CÉLULAS LIVRES
    ========================================================= */
 
@@ -116,9 +130,7 @@ function moveMouseToRandomCell() {
 
   MOUSE_POSITION.y = nextPosition.y;
 
-  mouseFood.style.setProperty("--mouse-x", MOUSE_POSITION.x);
-
-  mouseFood.style.setProperty("--mouse-y", MOUSE_POSITION.y);
+  updateMousePosition();
 }
 
 /* =========================================================
@@ -293,6 +305,7 @@ function endGame(reason) {
   }
 
   isGameOver = true;
+
   gameOverReason = reason;
 
   inputController.stop();
@@ -524,6 +537,8 @@ const inputController = createInputController({
 /* =========================================================
    INICIALIZAÇÃO
    ========================================================= */
+
+updateMousePosition();
 
 snakeRenderer.create(snake, direction);
 
