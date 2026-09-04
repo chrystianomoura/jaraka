@@ -4,14 +4,11 @@ import { createInputController } from "./input.js";
 import { createMouseController } from "./mouse.js";
 import { createSnakeRenderer } from "./snake.js";
 
-import {
-  EPSILON,
-  GRID_SIZE,
-  MOVE_INTERVAL,
-  VISUAL_GROWTH_RELEASE_STEP,
-} from "./game/config.js";
+import { GRID_SIZE, MOVE_INTERVAL } from "./game/config.js";
 
 import { isSamePosition, willHitSelf, willHitWall } from "./game/collision.js";
+
+import { createGrowthController } from "./game/growth.js";
 
 const MOUSE_POSITION = {
   x: 12,
@@ -53,21 +50,6 @@ let renderSnake = cloneSnake(snake);
 
 let previousRenderSnake = cloneSnake(renderSnake);
 
-/*
- * Distância, em células, que a cauda
- * visual está à frente da cauda lógica.
- *
- * Quando ocorre crescimento lógico,
- * a cauda lógica deixa de avançar uma
- * célula naquele tick.
- *
- * Em vez de deixar a cauda visual parar,
- * registramos essa diferença aqui e a
- * absorvemos aos poucos.
- */
-
-let visualGrowthOffset = 0;
-
 /* =========================================================
    DIREÇÃO
    ========================================================= */
@@ -93,12 +75,6 @@ let isGameOver = false;
 let gameOverReason = null;
 
 /* =========================================================
-   CRESCIMENTO LÓGICO
-   ========================================================= */
-
-let pendingGrowth = 0;
-
-/* =========================================================
    CONTROLLERS
    ========================================================= */
 
@@ -111,20 +87,14 @@ const mouseController = createMouseController({
   position: MOUSE_POSITION,
 });
 
+const growthController = createGrowthController();
+
 /* =========================================================
    POSIÇÕES
    ========================================================= */
 
 function isSnakePosition(position) {
   return snake.some((segment) => isSamePosition(segment, position));
-}
-
-/* =========================================================
-   INTERPOLAÇÃO
-   ========================================================= */
-
-function lerp(start, end, progress) {
-  return start + (end - start) * progress;
 }
 
 /* =========================================================
@@ -340,134 +310,6 @@ function endGame(reason) {
 }
 
 /* =========================================================
-   CRESCIMENTO — FILA
-   ========================================================= */
-
-function queueGrowth() {
-  if (isGameOver) {
-    return;
-  }
-
-  pendingGrowth += 1;
-}
-
-/* =========================================================
-   CRESCIMENTO — APLICAÇÃO LÓGICA
-   ========================================================= */
-
-function applyPendingGrowth(tailBeforeMove) {
-  if (pendingGrowth <= 0 || !tailBeforeMove) {
-    return false;
-  }
-
-  snake.push({
-    x: tailBeforeMove.x,
-    y: tailBeforeMove.y,
-  });
-
-  pendingGrowth -= 1;
-
-  return true;
-}
-
-/* =========================================================
-   CRESCIMENTO — CAUDA VISUAL
-   ========================================================= */
-
-/*
- * Constrói uma cópia visual da cobra
- * com a extremidade deslocada para frente
- * ao longo da própria trajetória do grid.
- *
- * O offset pode ser maior que 1.
- *
- * Isso é importante porque um segundo rato
- * pode ser consumido antes que o crescimento
- * visual anterior tenha sido completamente
- * absorvido.
- */
-
-function createVisualSnake(source, tailOffset) {
-  const result = cloneSnake(source);
-
-  if (result.length < 2 || tailOffset <= EPSILON) {
-    return result;
-  }
-
-  let remainingOffset = Math.min(tailOffset, Math.max(0, result.length - 2));
-
-  /*
-   * Cada unidade inteira do offset
-   * remove visualmente uma célula completa
-   * da extremidade.
-   *
-   * A cobra lógica não é alterada.
-   */
-
-  while (remainingOffset >= 1 - EPSILON && result.length > 2) {
-    result.pop();
-
-    remainingOffset -= 1;
-  }
-
-  /*
-   * A fração restante posiciona a ponta
-   * entre a célula atual da cauda e a
-   * célula imediatamente anterior.
-   */
-
-  if (remainingOffset > EPSILON && result.length >= 2) {
-    const tailIndex = result.length - 1;
-
-    const tail = result[tailIndex];
-
-    const beforeTail = result[tailIndex - 1];
-
-    result[tailIndex] = {
-      x: lerp(tail.x, beforeTail.x, remainingOffset),
-
-      y: lerp(tail.y, beforeTail.y, remainingOffset),
-    };
-  }
-
-  return result;
-}
-
-/* =========================================================
-   CRESCIMENTO — ATUALIZAÇÃO VISUAL
-   ========================================================= */
-
-function updateVisualGrowth(didGrow) {
-  /*
-   * Quando a cobra cresce logicamente,
-   * a cauda deixou de avançar uma célula.
-   *
-   * Adicionamos essa célula ao débito
-   * visual.
-   */
-
-  if (didGrow) {
-    visualGrowthOffset += 1;
-  }
-
-  /*
-   * No MESMO tick já liberamos uma fração.
-   *
-   * Portanto a cauda nunca experimenta
-   * um frame de velocidade zero.
-   */
-
-  if (visualGrowthOffset > EPSILON) {
-    visualGrowthOffset = Math.max(
-      0,
-      visualGrowthOffset - VISUAL_GROWTH_RELEASE_STEP,
-    );
-  }
-
-  renderSnake = createVisualSnake(snake, visualGrowthOffset);
-}
-
-/* =========================================================
    ALIMENTAÇÃO
    ========================================================= */
 
@@ -551,7 +393,9 @@ function moveSnake() {
     willHitSelf({
       position: newHead,
       snake,
-      pendingGrowth,
+
+      pendingGrowth: growthController.getPendingGrowth(),
+
       willGrow: willEatMouse,
     })
   ) {
@@ -565,7 +409,7 @@ function moveSnake() {
      ------------------------------------------------------- */
 
   if (willEatMouse) {
-    queueGrowth();
+    growthController.queue();
   }
 
   /* -------------------------------------------------------
@@ -600,13 +444,13 @@ function moveSnake() {
      CRESCIMENTO LÓGICO
      ------------------------------------------------------- */
 
-  const didGrow = applyPendingGrowth(tailBeforeMove);
+  const didGrow = growthController.applyPendingGrowth(snake, tailBeforeMove);
 
   /* -------------------------------------------------------
      CRESCIMENTO VISUAL
      ------------------------------------------------------- */
 
-  updateVisualGrowth(didGrow);
+  renderSnake = growthController.updateVisualGrowth(snake, didGrow);
 
   /* -------------------------------------------------------
      RENDERER
