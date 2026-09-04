@@ -11,6 +11,8 @@ import {
   VISUAL_GROWTH_RELEASE_STEP,
 } from "./game/config.js";
 
+import { isSamePosition, willHitSelf, willHitWall } from "./game/collision.js";
+
 const MOUSE_POSITION = {
   x: 12,
   y: 7,
@@ -112,10 +114,6 @@ const mouseController = createMouseController({
 /* =========================================================
    POSIÇÕES
    ========================================================= */
-
-function isSamePosition(first, second) {
-  return first.x === second.x && first.y === second.y;
-}
 
 function isSnakePosition(position) {
   return snake.some((segment) => isSamePosition(segment, position));
@@ -317,30 +315,6 @@ function getTurnSide(current, next) {
   const cross = current.x * next.y - current.y * next.x;
 
   return cross > 0 ? "right" : "left";
-}
-
-/* =========================================================
-   COLISÃO — PAREDES
-   ========================================================= */
-
-function willHitWall(position) {
-  return (
-    position.x < 0 ||
-    position.x >= GRID_SIZE ||
-    position.y < 0 ||
-    position.y >= GRID_SIZE
-  );
-}
-
-/* =========================================================
-   COLISÃO — PRÓPRIO CORPO
-   ========================================================= */
-
-function willHitSelf(position, willGrow = false) {
-  const body =
-    pendingGrowth > 0 || willGrow ? snake.slice(1) : snake.slice(1, -1);
-
-  return body.some((segment) => isSamePosition(segment, position));
 }
 
 /* =========================================================
@@ -573,7 +547,14 @@ function moveSnake() {
      COLISÃO COM O PRÓPRIO CORPO
      ------------------------------------------------------- */
 
-  if (willHitSelf(newHead, willEatMouse)) {
+  if (
+    willHitSelf({
+      position: newHead,
+      snake,
+      pendingGrowth,
+      willGrow: willEatMouse,
+    })
+  ) {
     endGame("self");
 
     return;
