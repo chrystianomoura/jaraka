@@ -8,6 +8,8 @@ import { MOVE_INTERVAL } from "./game/config.js";
 
 import { isSamePosition, willHitSelf, willHitWall } from "./game/collision.js";
 
+import { createDirectionController } from "./game/direction.js";
+
 import { createGrowthController } from "./game/growth.js";
 
 import { createFoodController } from "./game/food.js";
@@ -52,20 +54,6 @@ let renderSnake = cloneSnake(snake);
 let previousRenderSnake = cloneSnake(renderSnake);
 
 /* =========================================================
-   DIREÇÃO
-   ========================================================= */
-
-let direction = {
-  x: 1,
-  y: 0,
-};
-
-let queuedDirection = {
-  x: 1,
-  y: 0,
-};
-
-/* =========================================================
    LOOP
    ========================================================= */
 
@@ -95,6 +83,11 @@ const mouseController = createMouseController({
 
 const growthController = createGrowthController();
 
+const directionController = createDirectionController({
+  x: 1,
+  y: 0,
+});
+
 const foodController = createFoodController({
   element: mouseFood,
 
@@ -108,24 +101,6 @@ const foodController = createFoodController({
 
   initialPosition: mousePosition,
 });
-
-/* =========================================================
-   DIREÇÃO
-   ========================================================= */
-
-function isSameDirection(candidate, current) {
-  return candidate.x === current.x && candidate.y === current.y;
-}
-
-function isOppositeDirection(candidate, current) {
-  return candidate.x === -current.x && candidate.y === -current.y;
-}
-
-function getTurnSide(current, next) {
-  const cross = current.x * next.y - current.y * next.x;
-
-  return cross > 0 ? "right" : "left";
-}
 
 /* =========================================================
    GAME OVER
@@ -196,7 +171,7 @@ function moveSnake() {
     return;
   }
 
-  direction = queuedDirection;
+  const direction = directionController.applyQueuedDirection();
 
   inputController.unlock();
 
@@ -347,21 +322,15 @@ function queueDirection(candidate) {
     return false;
   }
 
-  if (isSameDirection(candidate, direction)) {
+  const result = directionController.queue(candidate);
+
+  if (!result.accepted) {
     return false;
   }
-
-  if (isOppositeDirection(candidate, direction)) {
-    return false;
-  }
-
-  const turnSide = getTurnSide(direction, candidate);
-
-  queuedDirection = candidate;
 
   snakeRenderer.updateHeadDirection(candidate);
 
-  snakeRenderer.triggerHeadTurn(turnSide);
+  snakeRenderer.triggerHeadTurn(result.turnSide);
 
   return true;
 }
@@ -379,7 +348,7 @@ function handleDirectionChange(candidate) {
 }
 
 const inputController = createInputController({
-  getDirection: () => direction,
+  getDirection: () => directionController.getDirection(),
 
   onDirectionChange: handleDirectionChange,
 });
@@ -390,7 +359,9 @@ const inputController = createInputController({
 
 foodController.updatePosition();
 
-snakeRenderer.create(snake, direction);
+const initialDirection = directionController.getDirection();
+
+snakeRenderer.create(snake, initialDirection);
 
 mouseController.update(snake[0]);
 
