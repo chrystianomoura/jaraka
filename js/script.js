@@ -4,16 +4,17 @@ import { createInputController } from "./input.js";
 import { createMouseController } from "./mouse.js";
 import { createSnakeRenderer } from "./snake.js";
 
-import { GRID_SIZE, MOVE_INTERVAL } from "./game/config.js";
+import { MOVE_INTERVAL } from "./game/config.js";
 
 import { isSamePosition, willHitSelf, willHitWall } from "./game/collision.js";
 
 import { createGrowthController } from "./game/growth.js";
 
-const MOUSE_POSITION = {
-  x: 12,
-  y: 7,
-};
+import { createFoodController } from "./game/food.js";
+
+/* =========================================================
+   DOM
+   ========================================================= */
 
 const gameBoard = document.querySelector(".game-board");
 
@@ -82,192 +83,31 @@ const snakeRenderer = createSnakeRenderer({
   layer: snakeLayer,
 });
 
+const mousePosition = {
+  x: 12,
+  y: 7,
+};
+
 const mouseController = createMouseController({
   element: mouseFood,
-  position: MOUSE_POSITION,
+  position: mousePosition,
 });
 
 const growthController = createGrowthController();
 
-/* =========================================================
-   POSIÇÕES
-   ========================================================= */
+const foodController = createFoodController({
+  element: mouseFood,
 
-function isSnakePosition(position) {
-  return snake.some((segment) => isSamePosition(segment, position));
-}
+  actor: mouseActor,
 
-/* =========================================================
-   RATO — POSIÇÃO VISUAL
-   ========================================================= */
+  mouseController,
 
-function updateMousePosition() {
-  if (!mouseFood) {
-    return;
-  }
+  getSnake: () => snake,
 
-  mouseFood.style.setProperty("--mouse-x", MOUSE_POSITION.x);
+  isGameOver: () => isGameOver,
 
-  mouseFood.style.setProperty("--mouse-y", MOUSE_POSITION.y);
-}
-
-/* =========================================================
-   RATO — CÉLULAS LIVRES
-   ========================================================= */
-
-function getFreeCells() {
-  const freeCells = [];
-
-  for (let y = 0; y < GRID_SIZE; y += 1) {
-    for (let x = 0; x < GRID_SIZE; x += 1) {
-      const position = {
-        x,
-        y,
-      };
-
-      if (!isSnakePosition(position)) {
-        freeCells.push(position);
-      }
-    }
-  }
-
-  return freeCells;
-}
-
-/* =========================================================
-   RATO — NOVA POSIÇÃO
-   ========================================================= */
-
-function moveMouseToRandomCell() {
-  const freeCells = getFreeCells();
-
-  if (freeCells.length === 0) {
-    return;
-  }
-
-  const randomIndex = Math.floor(Math.random() * freeCells.length);
-
-  const nextPosition = freeCells[randomIndex];
-
-  MOUSE_POSITION.x = nextPosition.x;
-
-  MOUSE_POSITION.y = nextPosition.y;
-
-  updateMousePosition();
-}
-
-/* =========================================================
-   RATO — RESET VISUAL
-   ========================================================= */
-
-function resetMouseActor() {
-  if (!mouseActor) {
-    return;
-  }
-
-  mouseActor.getAnimations().forEach((animation) => {
-    animation.cancel();
-  });
-
-  mouseActor.style.opacity = "";
-
-  mouseActor.style.scale = "";
-
-  mouseActor.style.visibility = "";
-
-  mouseActor.style.transform = "";
-}
-
-/* =========================================================
-   RATO — RESPAWN INSTANTÂNEO
-   ========================================================= */
-
-function respawnMouseInstantly() {
-  if (isGameOver) {
-    return;
-  }
-
-  if (!mouseActor) {
-    moveMouseToRandomCell();
-
-    mouseController.update(snake[0]);
-
-    return;
-  }
-
-  mouseActor.style.visibility = "hidden";
-
-  moveMouseToRandomCell();
-
-  mouseController.update(snake[0]);
-
-  void mouseFood.offsetWidth;
-
-  resetMouseActor();
-
-  mouseActor.style.visibility = "visible";
-}
-
-/* =========================================================
-   RATO — ENTRADA NA BOCA
-   ========================================================= */
-
-function consumeMouseVisually() {
-  if (isGameOver) {
-    return;
-  }
-
-  if (!mouseActor) {
-    respawnMouseInstantly();
-
-    return;
-  }
-
-  const animation = mouseActor.animate(
-    [
-      {
-        opacity: 1,
-        scale: "1",
-        offset: 0,
-      },
-
-      {
-        opacity: 1,
-        scale: "0.86",
-        offset: 0.32,
-      },
-
-      {
-        opacity: 0.82,
-        scale: "0.52",
-        offset: 0.7,
-      },
-
-      {
-        opacity: 0,
-        scale: "0.12",
-        offset: 1,
-      },
-    ],
-    {
-      duration: 150,
-
-      easing: "cubic-bezier(0.4, 0, 0.2, 1)",
-
-      fill: "forwards",
-    },
-  );
-
-  animation.finished
-    .then(() => {
-      if (isGameOver) {
-        return;
-      }
-
-      respawnMouseInstantly();
-    })
-    .catch(() => {});
-}
+  initialPosition: mousePosition,
+});
 
 /* =========================================================
    DIREÇÃO
@@ -319,11 +159,11 @@ function startEatingSequence() {
   }
 
   /*
-   * Aqui ficam somente os efeitos
-   * visuais da alimentação.
+   * Aqui ficam somente os efeitos visuais
+   * coordenados pelo renderer.
    *
-   * O crescimento lógico já foi
-   * tratado dentro do movimento.
+   * O crescimento lógico já foi tratado
+   * dentro do movimento.
    */
 
   snakeRenderer.triggerEatingSequence({
@@ -332,7 +172,7 @@ function startEatingSequence() {
         return;
       }
 
-      consumeMouseVisually();
+      foodController.consumeVisually();
     },
 
     onSwallowComplete: () => {
@@ -373,7 +213,7 @@ function moveSnake() {
    * de efetivar o movimento.
    */
 
-  const willEatMouse = isSamePosition(newHead, MOUSE_POSITION);
+  const willEatMouse = isSamePosition(newHead, foodController.getPosition());
 
   /* -------------------------------------------------------
      COLISÃO COM PAREDE
@@ -392,6 +232,7 @@ function moveSnake() {
   if (
     willHitSelf({
       position: newHead,
+
       snake,
 
       pendingGrowth: growthController.getPendingGrowth(),
@@ -547,7 +388,7 @@ const inputController = createInputController({
    INICIALIZAÇÃO
    ========================================================= */
 
-updateMousePosition();
+foodController.updatePosition();
 
 snakeRenderer.create(snake, direction);
 
