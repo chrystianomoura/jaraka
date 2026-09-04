@@ -4,26 +4,12 @@ import { createInputController } from "./input.js";
 import { createMouseController } from "./mouse.js";
 import { createSnakeRenderer } from "./snake.js";
 
-const GRID_SIZE = 16;
-const MOVE_INTERVAL = 180;
-
-/*
- * O crescimento visual de uma célula
- * é absorvido gradualmente.
- *
- * 7 ticks:
- * cauda ≈ 85,7% da velocidade normal.
- *
- * Isso mantém o crescimento perceptualmente
- * contínuo sem produzir parada ou desaceleração
- * brusca na extremidade.
- */
-
-const VISUAL_GROWTH_RELEASE_TICKS = 7;
-
-const VISUAL_GROWTH_RELEASE_STEP = 1 / VISUAL_GROWTH_RELEASE_TICKS;
-
-const EPSILON = 0.0001;
+import {
+  EPSILON,
+  GRID_SIZE,
+  MOVE_INTERVAL,
+  VISUAL_GROWTH_RELEASE_STEP,
+} from "./game/config.js";
 
 const MOUSE_POSITION = {
   x: 12,
