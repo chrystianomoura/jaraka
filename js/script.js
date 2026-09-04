@@ -14,6 +14,8 @@ import { createGrowthController } from "./game/growth.js";
 
 import { createFoodController } from "./game/food.js";
 
+import { getNextHeadPosition, moveSnakeSegments } from "./game/movement.js";
+
 /* =========================================================
    DOM
    ========================================================= */
@@ -177,11 +179,7 @@ function moveSnake() {
 
   const head = snake[0];
 
-  const newHead = {
-    x: head.x + direction.x,
-
-    y: head.y + direction.y,
-  };
+  const newHead = getNextHeadPosition(head, direction);
 
   /*
    * Detectamos a alimentação antes
@@ -235,26 +233,10 @@ function moveSnake() {
   previousRenderSnake = cloneSnake(renderSnake);
 
   /* -------------------------------------------------------
-     CAUDA ANTES DO MOVIMENTO
-     ------------------------------------------------------- */
-
-  const tailBeforeMove = {
-    ...snake[snake.length - 1],
-  };
-
-  /* -------------------------------------------------------
      MOVIMENTO DOS SEGMENTOS
      ------------------------------------------------------- */
 
-  for (let index = snake.length - 1; index > 0; index -= 1) {
-    snake[index] = {
-      x: snake[index - 1].x,
-
-      y: snake[index - 1].y,
-    };
-  }
-
-  snake[0] = newHead;
+  const tailBeforeMove = moveSnakeSegments(snake, newHead);
 
   /* -------------------------------------------------------
      CRESCIMENTO LÓGICO
