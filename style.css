@@ -47,6 +47,10 @@ body {
   padding: var(--page-padding);
 }
 
+/* =========================================================
+   TABULEIRO
+   ========================================================= */
+
 .game-board {
   position: relative;
 
@@ -58,6 +62,11 @@ body {
   background-color: var(--color-board);
 
   background-image:
+    radial-gradient(
+      circle at 0 0,
+      rgba(70, 210, 255, 0.58) 1.15px,
+      transparent 1.45px
+    ),
     linear-gradient(
       to right,
       var(--color-grid) 1px,
@@ -70,7 +79,14 @@ body {
     );
 
   background-size:
+    calc(100% / 24) calc(100% / 24),
+    calc(100% / 24) calc(100% / 24),
     calc(100% / 24) calc(100% / 24);
+
+  background-position:
+    0 0,
+    0 0,
+    0 0;
 
   border: 2px solid var(--color-board-border);
   border-radius: 22px;
@@ -290,9 +306,9 @@ body {
 .snake-eye {
   position: absolute;
 
-  top: 27%;
+  top: 25.5%;
 
-  width: 19%;
+  width: 22.5%;
   aspect-ratio: 1;
 
   border-radius: 50%;
@@ -311,11 +327,11 @@ body {
 }
 
 .snake-eye--left {
-  left: 20%;
+  left: 21%;
 }
 
 .snake-eye--right {
-  right: 20%;
+  right: 21%;
 }
 
 .snake-eye::after {
@@ -323,16 +339,16 @@ body {
 
   position: absolute;
 
-  top: 16%;
-  left: 18%;
+  top: 13%;
+  left: 16%;
 
-  width: 34%;
+  width: 38%;
   aspect-ratio: 1;
 
   border-radius: 50%;
 
   background:
-    rgba(255, 255, 255, 0.94);
+    rgba(255, 255, 255, 0.98);
 }
 
 /* =========================================================
@@ -343,16 +359,16 @@ body {
   position: absolute;
 
   left: 50%;
-  bottom: 19%;
+  bottom: 17.5%;
 
-  width: 30%;
-  height: 16%;
+  width: 34%;
+  height: 18%;
 
   transform:
     translateX(-50%);
 
   border-bottom:
-    2.5px solid #05060a;
+    2.7px solid #05060a;
 
   border-radius:
     0 0 999px 999px;
@@ -363,21 +379,21 @@ body {
    ========================================================= */
 
 .snake-head[data-direction="right"] {
-  --eye-x: 1.5px;
+  --eye-x: 2px;
   --eye-y: 0;
 }
 
 .snake-head[data-direction="left"] {
-  --eye-x: -1.5px;
+  --eye-x: -2px;
   --eye-y: 0;
 }
 
 .snake-head[data-direction="up"] {
   --eye-x: 0;
-  --eye-y: -1.5px;
+  --eye-y: -2px;
 }
 
 .snake-head[data-direction="down"] {
   --eye-x: 0;
-  --eye-y: 1.5px;
+  --eye-y: 2px;
 }
