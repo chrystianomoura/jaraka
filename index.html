@@ -1,53 +1,52 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="pt-BR">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="theme-color" content="#050817" />
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#050817" />
 
-  <title>JARAKA</title>
+    <title>JARAKA</title>
 
-  <link rel="stylesheet" href="style.css" />
-</head>
+    <link rel="stylesheet" href="css/main.css" />
+  </head>
 
-<body>
-  <main class="game-shell">
-    <section class="game-board" aria-label="Tabuleiro da JARAKA">
+  <body>
+    <main class="game-shell">
+      <section class="game-board" aria-label="Tabuleiro da JARAKA">
+        <div
+          class="mouse-food is-angry"
+          style="--mouse-x: 17; --mouse-y: 8"
+          aria-label="Ratinho"
+        >
+          <div class="mouse-actor">
+            <div class="mouse-core">
+              <span class="mouse-ear mouse-ear--left"></span>
+              <span class="mouse-ear mouse-ear--right"></span>
 
-      <div
-        class="mouse-food is-angry"
-        style="--mouse-x: 17; --mouse-y: 8"
-        aria-label="Ratinho"
-      >
-        <div class="mouse-actor">
-          <div class="mouse-core">
-            <span class="mouse-ear mouse-ear--left"></span>
-            <span class="mouse-ear mouse-ear--right"></span>
+              <div class="mouse-face">
+                <span class="mouse-brow mouse-brow--left"></span>
+                <span class="mouse-brow mouse-brow--right"></span>
 
-            <div class="mouse-face">
-              <span class="mouse-brow mouse-brow--left"></span>
-              <span class="mouse-brow mouse-brow--right"></span>
+                <span class="mouse-eye mouse-eye--left"></span>
+                <span class="mouse-eye mouse-eye--right"></span>
 
-              <span class="mouse-eye mouse-eye--left"></span>
-              <span class="mouse-eye mouse-eye--right"></span>
+                <span class="mouse-nose"></span>
+                <span class="mouse-mouth"></span>
 
-              <span class="mouse-nose"></span>
-              <span class="mouse-mouth"></span>
+                <span class="mouse-whisker mouse-whisker--left-top"></span>
+                <span class="mouse-whisker mouse-whisker--left-bottom"></span>
 
-              <span class="mouse-whisker mouse-whisker--left-top"></span>
-              <span class="mouse-whisker mouse-whisker--left-bottom"></span>
-
-              <span class="mouse-whisker mouse-whisker--right-top"></span>
-              <span class="mouse-whisker mouse-whisker--right-bottom"></span>
+                <span class="mouse-whisker mouse-whisker--right-top"></span>
+                <span class="mouse-whisker mouse-whisker--right-bottom"></span>
+              </div>
             </div>
           </div>
         </div>
-      </div>
 
-      <div class="snake-layer" aria-label="Verdyka"></div>
-    </section>
-  </main>
+        <div class="snake-layer" aria-label="Verdyka"></div>
+      </section>
+    </main>
 
-  <script src="script.js"></script>
-</body>
+    <script type="module" src="js/script.js"></script>
+  </body>
 </html>

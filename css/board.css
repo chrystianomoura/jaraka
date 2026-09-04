@@ -1,0 +1,43 @@
+/* =========================================================
+   JARAKA
+   Board
+   ========================================================= */
+
+/* =========================================================
+   TABULEIRO
+   ========================================================= */
+
+.game-board {
+  position: relative;
+
+  width: var(--board-size);
+
+  aspect-ratio: 1;
+
+  overflow: hidden;
+
+  background-color: var(--color-board);
+
+  background-image:
+    radial-gradient(
+      circle at 0 0,
+      rgba(70, 210, 255, 0.58) 1.15px,
+      transparent 1.45px
+    ),
+    linear-gradient(to right, var(--color-grid) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--color-grid) 1px, transparent 1px);
+
+  background-size:
+    calc(100% / 24) calc(100% / 24),
+    calc(100% / 24) calc(100% / 24),
+    calc(100% / 24) calc(100% / 24);
+
+  background-position:
+    0 0,
+    0 0,
+    0 0;
+
+  border: 2px solid var(--color-board-border);
+
+  border-radius: 22px;
+}

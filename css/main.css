@@ -1,0 +1,18 @@
+/* =========================================================
+   JARAKA
+   CSS Entry Point
+   ========================================================= */
+
+/*
+ * Ordem de carregamento:
+ *
+ * 1. Base global e design tokens
+ * 2. Estrutura visual do tabuleiro
+ * 3. Personagem jogável
+ * 4. Alimento/personagem secundário
+ */
+
+@import url("./base.css");
+@import url("./board.css");
+@import url("./snake.css");
+@import url("./mouse.css");

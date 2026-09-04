@@ -1,0 +1,87 @@
+/* =========================================================
+   JARAKA
+   Base
+   ========================================================= */
+
+/* =========================================================
+   TOKENS
+   ========================================================= */
+
+:root {
+  /* Background */
+
+  --color-background: #050817;
+
+  /* Board */
+
+  --color-board: #080c20;
+  --color-board-border: #ff3d9a;
+  --color-grid: rgba(75, 123, 255, 0.11);
+
+  /* Verdyka */
+
+  --color-verdyka: #39ff6a;
+  --color-verdyka-highlight: #8cff63;
+  --color-verdyka-shadow: #13c94d;
+
+  /* Mouse */
+
+  --color-mouse: #9da5b7;
+  --color-mouse-light: #d5dae4;
+  --color-mouse-shadow: #646d82;
+
+  --color-mouse-ear: #f38aa7;
+  --color-mouse-ear-light: #ffb1c5;
+  --color-mouse-nose: #ff719d;
+
+  /* Layout */
+
+  --page-padding: 24px;
+
+  --board-size: min(78vw, 78vh, 760px);
+
+  --cell-size: calc(var(--board-size) / 24);
+}
+
+/* =========================================================
+   RESET
+   ========================================================= */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  width: 100%;
+  height: 100%;
+}
+
+body {
+  width: 100%;
+  min-width: 100%;
+
+  height: 100%;
+  min-height: 100svh;
+
+  margin: 0;
+
+  overflow: hidden;
+
+  background: var(--color-background);
+}
+
+/* =========================================================
+   GAME SHELL
+   ========================================================= */
+
+.game-shell {
+  width: 100%;
+  height: 100svh;
+
+  display: grid;
+  place-items: center;
+
+  padding: var(--page-padding);
+}

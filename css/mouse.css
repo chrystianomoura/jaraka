@@ -1,0 +1,534 @@
+/* =========================================================
+   JARAKA
+   Mouse
+   ========================================================= */
+
+/* =========================================================
+   POSIÇÃO LÓGICA
+   ========================================================= */
+
+.mouse-food {
+  position: absolute;
+
+  --mouse-size: 1.1;
+
+  --mouse-offset: calc((1 - var(--mouse-size)) * var(--cell-size) / 2);
+
+  width: calc(var(--cell-size) * var(--mouse-size));
+
+  height: calc(var(--cell-size) * var(--mouse-size));
+
+  transform: translate3d(
+    calc(var(--mouse-x) * var(--cell-size) + var(--mouse-offset)),
+    calc(var(--mouse-y) * var(--cell-size) + var(--mouse-offset)),
+    0
+  );
+
+  z-index: 5;
+
+  pointer-events: none;
+}
+
+/* =========================================================
+   ATOR VISUAL
+   ========================================================= */
+
+.mouse-actor {
+  position: absolute;
+
+  inset: 0;
+
+  transform-origin: 50% 85%;
+
+  animation: mouse-provoke 1.85s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+
+  will-change: transform;
+}
+
+/* =========================================================
+   ANIMAÇÃO — PROVOCAÇÃO
+   ========================================================= */
+
+@keyframes mouse-provoke {
+  0%,
+  12% {
+    transform: translateY(0) rotate(0deg) scale(1);
+  }
+
+  18% {
+    transform: translateY(calc(var(--cell-size) * 0.055)) rotate(0deg)
+      scale(1.06, 0.92);
+  }
+
+  30% {
+    transform: translateY(calc(var(--cell-size) * -0.2)) rotate(-4deg)
+      scale(0.97, 1.05);
+  }
+
+  39% {
+    transform: translateY(calc(var(--cell-size) * -0.08)) rotate(3deg) scale(1);
+  }
+
+  46% {
+    transform: translateY(calc(var(--cell-size) * 0.035)) rotate(0deg)
+      scale(1.07, 0.91);
+  }
+
+  54% {
+    transform: translateY(0) rotate(0deg) scale(1);
+  }
+
+  68% {
+    transform: translateY(0) rotate(-5deg) scale(1.02);
+  }
+
+  76% {
+    transform: translateY(0) rotate(5deg) scale(1.02);
+  }
+
+  84% {
+    transform: translateY(0) rotate(-2deg) scale(1);
+  }
+
+  92%,
+  100% {
+    transform: translateY(0) rotate(0deg) scale(1);
+  }
+}
+
+/* =========================================================
+   ANIMAÇÃO — ASSUSTADO
+   ========================================================= */
+
+.mouse-food.is-scared .mouse-actor {
+  animation: mouse-scared 0.72s ease-in-out infinite;
+}
+
+@keyframes mouse-scared {
+  0%,
+  100% {
+    transform: translateY(0) rotate(0deg) scale(1);
+  }
+
+  15% {
+    transform: translateY(calc(var(--cell-size) * 0.035)) rotate(-2deg)
+      scale(1.06, 0.94);
+  }
+
+  36% {
+    transform: translateY(calc(var(--cell-size) * -0.16)) rotate(3deg)
+      scale(0.96, 1.07);
+  }
+
+  52% {
+    transform: translateY(calc(var(--cell-size) * -0.04)) rotate(-3deg) scale(1);
+  }
+
+  66% {
+    transform: translateY(calc(var(--cell-size) * 0.025)) rotate(2deg)
+      scale(1.07, 0.93);
+  }
+
+  78% {
+    transform: translateY(0) rotate(-2deg) scale(1);
+  }
+
+  88% {
+    transform: translateX(calc(var(--cell-size) * 0.025)) rotate(2deg);
+  }
+
+  94% {
+    transform: translateX(calc(var(--cell-size) * -0.025)) rotate(-2deg);
+  }
+}
+
+/* =========================================================
+   CORPO
+   ========================================================= */
+
+.mouse-core {
+  position: absolute;
+
+  left: 7%;
+  top: 7%;
+
+  width: 86%;
+  height: 86%;
+
+  border-radius: 47% 47% 49% 49%;
+
+  background: linear-gradient(
+    145deg,
+    var(--color-mouse-light) 0%,
+    var(--color-mouse) 46%,
+    var(--color-mouse-shadow) 100%
+  );
+
+  box-shadow:
+    0 0 7px rgba(175, 190, 220, 0.2),
+    0 0 14px rgba(175, 190, 220, 0.08);
+
+  transform-origin: 50% 50%;
+}
+
+.mouse-core::before {
+  content: "";
+
+  position: absolute;
+
+  top: 11%;
+  left: 17%;
+
+  width: 35%;
+  height: 15%;
+
+  border-radius: 999px;
+
+  background: rgba(255, 255, 255, 0.3);
+
+  filter: blur(0.25px);
+}
+
+/* =========================================================
+   ORELHAS
+   ========================================================= */
+
+.mouse-ear {
+  position: absolute;
+
+  top: -15%;
+
+  width: 38%;
+  aspect-ratio: 1;
+
+  border-radius: 50%;
+
+  background: linear-gradient(
+    145deg,
+    var(--color-mouse-light),
+    var(--color-mouse-shadow)
+  );
+
+  z-index: -1;
+
+  box-shadow: 0 0 4px rgba(255, 113, 157, 0.12);
+}
+
+.mouse-ear::after {
+  content: "";
+
+  position: absolute;
+
+  inset: 18%;
+
+  border-radius: 50%;
+
+  background: linear-gradient(
+    145deg,
+    var(--color-mouse-ear-light),
+    var(--color-mouse-ear)
+  );
+}
+
+.mouse-ear--left {
+  left: -7%;
+}
+
+.mouse-ear--right {
+  right: -7%;
+}
+
+/* =========================================================
+   ROSTO
+   ========================================================= */
+
+.mouse-face {
+  position: absolute;
+
+  inset: 0;
+
+  z-index: 2;
+}
+
+/* =========================================================
+   SOBRANCELHAS
+   ========================================================= */
+
+.mouse-brow {
+  position: absolute;
+
+  top: 26%;
+
+  width: 23%;
+  height: 2px;
+
+  border-radius: 999px;
+
+  background: #151821;
+
+  opacity: 0;
+
+  transition:
+    transform 120ms ease,
+    opacity 120ms ease;
+}
+
+.mouse-brow--left {
+  left: 17%;
+}
+
+.mouse-brow--right {
+  right: 17%;
+}
+
+/* =========================================================
+   OLHOS
+   ========================================================= */
+
+.mouse-eye {
+  position: absolute;
+
+  top: 34%;
+
+  width: 18%;
+  aspect-ratio: 1;
+
+  border-radius: 50%;
+
+  background: #05060a;
+
+  transition:
+    top 120ms ease,
+    width 120ms ease,
+    transform 120ms ease,
+    border-radius 120ms ease;
+}
+
+.mouse-eye--left {
+  left: 21%;
+}
+
+.mouse-eye--right {
+  right: 21%;
+}
+
+.mouse-eye::after {
+  content: "";
+
+  position: absolute;
+
+  top: 14%;
+  left: 17%;
+
+  width: 38%;
+  aspect-ratio: 1;
+
+  border-radius: 50%;
+
+  background: rgba(255, 255, 255, 0.97);
+}
+
+/* =========================================================
+   NARIZ
+   ========================================================= */
+
+.mouse-nose {
+  position: absolute;
+
+  left: 50%;
+  top: 56%;
+
+  width: 17%;
+  height: 12%;
+
+  transform: translateX(-50%);
+
+  border-radius: 60% 60% 75% 75%;
+
+  background: linear-gradient(145deg, #ffadc2, var(--color-mouse-nose));
+
+  box-shadow: 0 0 3px rgba(255, 113, 157, 0.24);
+}
+
+/* =========================================================
+   BOCA
+   ========================================================= */
+
+.mouse-mouth {
+  position: absolute;
+
+  left: 50%;
+  top: 67%;
+
+  width: 22%;
+  height: 11%;
+
+  transform: translateX(-50%);
+
+  border-bottom: 1.8px solid #151821;
+
+  border-radius: 0 0 999px 999px;
+
+  transition:
+    top 120ms ease,
+    width 120ms ease,
+    height 120ms ease,
+    border-radius 120ms ease,
+    border 120ms ease,
+    background 120ms ease;
+}
+
+/* =========================================================
+   BIGODES
+   ========================================================= */
+
+.mouse-whisker {
+  position: absolute;
+
+  top: 64%;
+
+  width: 24%;
+  height: 1px;
+
+  background: rgba(215, 221, 233, 0.75);
+
+  transform-origin: center;
+}
+
+.mouse-whisker--left-top {
+  left: -5%;
+
+  transform: rotate(10deg);
+}
+
+.mouse-whisker--left-bottom {
+  left: -6%;
+  top: 70%;
+
+  transform: rotate(-8deg);
+}
+
+.mouse-whisker--right-top {
+  right: -5%;
+
+  transform: rotate(-10deg);
+}
+
+.mouse-whisker--right-bottom {
+  right: -6%;
+  top: 70%;
+
+  transform: rotate(8deg);
+}
+
+/* =========================================================
+   EXPRESSÃO — NORMAL
+   ========================================================= */
+
+.mouse-food.is-normal .mouse-brow {
+  opacity: 0;
+}
+
+/* =========================================================
+   EXPRESSÃO — RAIVOSO
+   ========================================================= */
+
+.mouse-food.is-angry .mouse-brow {
+  opacity: 1;
+}
+
+.mouse-food.is-angry .mouse-brow--left {
+  transform: rotate(20deg);
+}
+
+.mouse-food.is-angry .mouse-brow--right {
+  transform: rotate(-20deg);
+}
+
+.mouse-food.is-angry .mouse-eye {
+  top: 36%;
+
+  width: 17%;
+}
+
+.mouse-food.is-angry .mouse-eye--left {
+  transform: rotate(5deg);
+}
+
+.mouse-food.is-angry .mouse-eye--right {
+  transform: rotate(-5deg);
+}
+
+.mouse-food.is-angry .mouse-mouth {
+  top: 70%;
+
+  height: 12%;
+
+  border-bottom: 0;
+
+  border-top: 2px solid #151821;
+
+  border-radius: 999px 999px 0 0;
+}
+
+.mouse-food.is-angry .mouse-core {
+  transform: scale(1.03, 0.97);
+}
+
+/* =========================================================
+   EXPRESSÃO — ASSUSTADO
+   ========================================================= */
+
+.mouse-food.is-scared .mouse-brow {
+  opacity: 0;
+}
+
+.mouse-food.is-scared .mouse-eye {
+  top: 32%;
+
+  transform: scale(1.2);
+}
+
+.mouse-food.is-scared .mouse-mouth {
+  top: 67%;
+
+  width: 14%;
+  height: 14%;
+
+  border: 1.8px solid #151821;
+
+  border-radius: 50%;
+
+  background: rgba(5, 6, 10, 0.35);
+}
+
+/* =========================================================
+   EXPRESSÃO — FELIZ
+   ========================================================= */
+
+.mouse-food.is-happy .mouse-eye {
+  transform: scale(0.92, 0.72);
+
+  border-radius: 50% 50% 40% 40%;
+}
+
+.mouse-food.is-happy .mouse-mouth {
+  top: 66%;
+
+  width: 27%;
+  height: 13%;
+
+  border-bottom: 2px solid #151821;
+
+  border-radius: 0 0 999px 999px;
+}
+
+/* =========================================================
+   ACESSIBILIDADE
+   ========================================================= */
+
+@media (prefers-reduced-motion: reduce) {
+  .mouse-actor {
+    animation: none;
+  }
+}
