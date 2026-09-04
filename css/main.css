@@ -8,11 +8,17 @@
  *
  * 1. Base global e design tokens
  * 2. Estrutura visual do tabuleiro
- * 3. Personagem jogável
- * 4. Alimento/personagem secundário
+ * 3. Corpo da personagem jogável
+ * 4. Cabeça e rosto da personagem jogável
+ * 5. Estados e animações de alimentação
+ * 6. Alimento/personagem secundário
  */
 
 @import url("./base.css");
 @import url("./board.css");
-@import url("./snake.css");
+
+@import url("./snake/body.css");
+@import url("./snake/head.css");
+@import url("./snake/eating.css");
+
 @import url("./mouse.css");

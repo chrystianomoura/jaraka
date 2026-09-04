@@ -1,0 +1,199 @@
+/* =========================================================
+   JARAKA — SNAKE HEAD
+   Cabeça e rosto da Verdyka
+
+   Responsabilidades:
+   - formato da cabeça;
+   - animação visual das curvas;
+   - rosto;
+   - olhos;
+   - boca em estado normal;
+   - olhar direcional.
+
+   Estados de alimentação vivem em:
+   ./eating.css
+   ========================================================= */
+
+/* =========================================================
+   CABEÇA
+   ========================================================= */
+
+.snake-head {
+  --part-size: 1.08;
+
+  z-index: 10;
+}
+
+.snake-head .snake-core {
+  border-radius: 32%;
+
+  transform-origin: 50% 50%;
+
+  box-shadow:
+    0 0 8px rgba(57, 255, 106, 0.32),
+    0 0 16px rgba(57, 255, 106, 0.13);
+}
+
+.snake-head .snake-core.is-horizontal {
+  transform: scale(1.045, 0.975);
+}
+
+.snake-head .snake-core.is-vertical {
+  transform: scale(0.975, 1.045);
+}
+
+/* =========================================================
+   CURVA DA CABEÇA
+   ========================================================= */
+
+.snake-head .snake-core.is-turning {
+  animation: head-turn 130ms ease-out;
+}
+
+@keyframes head-turn {
+  0% {
+    transform: scale(1) rotate(0deg);
+  }
+
+  45% {
+    transform: scale(1.09, 0.94) rotate(var(--head-turn-angle, 0deg));
+  }
+
+  100% {
+    transform: scale(1) rotate(0deg);
+  }
+}
+
+.snake-head[data-turn="left"] {
+  --head-turn-angle: -4deg;
+}
+
+.snake-head[data-turn="right"] {
+  --head-turn-angle: 4deg;
+}
+
+/* =========================================================
+   ROSTO
+   ========================================================= */
+
+.snake-face {
+  position: absolute;
+
+  inset: 0;
+
+  z-index: 3;
+
+  pointer-events: none;
+}
+
+/* =========================================================
+   OLHOS
+   ========================================================= */
+
+.snake-eye {
+  position: absolute;
+
+  top: 25.5%;
+
+  width: 22.5%;
+  aspect-ratio: 1;
+
+  border-radius: 50%;
+
+  background: #05060a;
+
+  transform: translate3d(var(--eye-x, 0), var(--eye-y, 0), 0);
+
+  transition:
+    top 90ms ease,
+    width 90ms ease,
+    transform 90ms ease-out;
+
+  z-index: 5;
+}
+
+.snake-eye--left {
+  left: 21%;
+}
+
+.snake-eye--right {
+  right: 21%;
+}
+
+.snake-eye::after {
+  content: "";
+
+  position: absolute;
+
+  top: 13%;
+  left: 16%;
+
+  width: 38%;
+  aspect-ratio: 1;
+
+  border-radius: 50%;
+
+  background: rgba(255, 255, 255, 0.98);
+}
+
+/* =========================================================
+   BOCA — NORMAL
+   ========================================================= */
+
+.snake-mouth {
+  position: absolute;
+
+  left: 50%;
+  bottom: 17.5%;
+
+  width: 34%;
+  height: 18%;
+
+  transform: translateX(-50%);
+
+  border-bottom: 2.7px solid #05060a;
+
+  border-radius: 0 0 999px 999px;
+
+  background: transparent;
+
+  overflow: visible;
+
+  z-index: 6;
+
+  transition:
+    left 90ms ease,
+    right 90ms ease,
+    top 90ms ease,
+    bottom 90ms ease,
+    width 90ms ease,
+    height 90ms ease,
+    transform 90ms ease,
+    border-radius 90ms ease,
+    border 90ms ease,
+    background 90ms ease;
+}
+
+/* =========================================================
+   OLHAR DIRECIONAL
+   ========================================================= */
+
+.snake-head[data-direction="right"] {
+  --eye-x: 2px;
+  --eye-y: 0;
+}
+
+.snake-head[data-direction="left"] {
+  --eye-x: -2px;
+  --eye-y: 0;
+}
+
+.snake-head[data-direction="up"] {
+  --eye-x: 0;
+  --eye-y: -2px;
+}
+
+.snake-head[data-direction="down"] {
+  --eye-x: 0;
+  --eye-y: 2px;
+}
