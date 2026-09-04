@@ -102,7 +102,7 @@ export function createSnakeRenderer({ layer }) {
   }
 
   /* =======================================================
-     FORMATO
+     FORMATO DOS SEGMENTOS
      ======================================================= */
 
   function getSegmentShape(snake, direction, index) {
@@ -143,7 +143,15 @@ export function createSnakeRenderer({ layer }) {
 
       const { core } = snakeElement;
 
-      core.classList.remove("is-horizontal", "is-vertical", "is-corner");
+      core.classList.remove(
+        "is-horizontal",
+        "is-vertical",
+        "is-corner",
+        "corner-up-right",
+        "corner-right-down",
+        "corner-down-left",
+        "corner-left-up",
+      );
 
       const shape = getSegmentShape(snake, direction, index);
 
@@ -158,6 +166,10 @@ export function createSnakeRenderer({ layer }) {
   function lerp(start, end, progress) {
     return start + (end - start) * progress;
   }
+
+  /* =======================================================
+     RENDERIZAÇÃO
+     ======================================================= */
 
   function render(snake, previousSnake, progress) {
     syncSegments(snake);
@@ -174,6 +186,22 @@ export function createSnakeRenderer({ layer }) {
       const visualX = lerp(previous.x, segment.x, progress);
 
       const visualY = lerp(previous.y, segment.y, progress);
+
+      /*
+       * Garantia importante:
+       *
+       * Nenhuma escala ou deformação
+       * é aplicada ao .snake-part.
+       *
+       * O elemento externo cuida
+       * SOMENTE da posição.
+       */
+
+      snakeElement.element.style.removeProperty("scale");
+
+      snakeElement.element.style.removeProperty("transform-origin");
+
+      delete snakeElement.element.dataset.motionScale;
 
       snakeElement.element.style.setProperty("--visual-x", visualX);
 
@@ -196,7 +224,7 @@ export function createSnakeRenderer({ layer }) {
   }
 
   /* =======================================================
-     CURVA
+     CURVA DA CABEÇA
      ======================================================= */
 
   function triggerHeadTurn(turnSide) {
@@ -377,17 +405,14 @@ export function createSnakeRenderer({ layer }) {
   function triggerEatingSequence({ onMouseEnter, onSwallowComplete } = {}) {
     /*
      * 0 ms
-     *
-     * A cabeça abre a boca.
+     * Abre a boca.
      */
 
     triggerBite();
 
     /*
      * 115 ms
-     *
-     * O rato começa a desaparecer
-     * dentro da boca.
+     * Rato entra.
      */
 
     window.setTimeout(() => {
@@ -396,8 +421,7 @@ export function createSnakeRenderer({ layer }) {
 
     /*
      * 300 ms
-     *
-     * A boca começa a fechar.
+     * Fecha a boca.
      */
 
     window.setTimeout(() => {
@@ -405,20 +429,9 @@ export function createSnakeRenderer({ layer }) {
     }, 300);
 
     /*
-     * 440 ms
-     *
-     * Começa a mastigação.
-     */
-
-    window.setTimeout(() => {
-      triggerChew();
-    }, 440);
-
-    /*
-     * 760 ms
-     *
-     * A digestão começa enquanto
-     * a Verdyka ainda mastiga.
+     * 360 ms
+     * O alimento começa a percorrer
+     * imediatamente o corpo.
      */
 
     window.setTimeout(() => {
@@ -429,22 +442,30 @@ export function createSnakeRenderer({ layer }) {
           onSwallowComplete?.();
         },
       });
-    }, 760);
+    }, 360);
+
+    /*
+     * 440 ms
+     * Mastigação.
+     */
+
+    window.setTimeout(() => {
+      triggerChew();
+    }, 440);
 
     /*
      * 1340 ms
-     *
-     * Os 900 ms de mastigação
-     * terminaram.
-     *
-     * A face retorna ao estado
-     * normal.
+     * Volta à expressão normal.
      */
 
     window.setTimeout(() => {
       finishChew();
     }, 1340);
   }
+
+  /* =======================================================
+     API
+     ======================================================= */
 
   return {
     create,

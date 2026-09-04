@@ -17,7 +17,7 @@
   align-items: center;
   justify-content: center;
 
-  padding: 24px;
+  padding: 40px;
 }
 
 /* =========================================================
@@ -27,45 +27,81 @@
 .game-board {
   position: relative;
 
-  --board-size: min(78vw, 78vh, 760px);
+  --board-size:
+    min(
+      78vw,
+      78vh,
+      760px
+    );
 
-  --cell-size: calc(var(--board-size) / 24);
+  --cell-size:
+    calc(
+      var(--board-size) /
+      24
+    );
 
-  width: var(--board-size);
+  /*
+   * Espaço entre o último quadrado
+   * do grid e a moldura rosa.
+   */
 
-  height: var(--board-size);
+  --board-frame-gap: 5px;
+
+  /*
+   * Espessura da moldura.
+   */
+
+  --board-frame-width: 10px;
+
+  width:
+    var(--board-size);
+
+  height:
+    var(--board-size);
 
   flex: 0 0 auto;
 
+  /*
+   * A área jogável permanece
+   * completamente quadrada.
+   */
+
   border: 0;
+  border-radius: 0;
 
-  border-radius: 22px;
-
-  background-color: var(--color-board);
+  background-color:
+    var(--color-board);
 
   background-image:
-    linear-gradient(to right, var(--color-grid) 1px, transparent 1px),
-    linear-gradient(to bottom, var(--color-grid) 1px, transparent 1px),
+    linear-gradient(
+      to right,
+      var(--color-grid) 1px,
+      transparent 1px
+    ),
+    linear-gradient(
+      to bottom,
+      var(--color-grid) 1px,
+      transparent 1px
+    ),
     radial-gradient(
       circle at 0 0,
-      rgba(70, 210, 255, 0.58) 1.15px,
+      rgba(
+        70,
+        210,
+        255,
+        0.58
+      )
+      1.15px,
       transparent 1.45px
     );
 
   background-size:
-    var(--cell-size) var(--cell-size),
-    var(--cell-size) var(--cell-size),
-    var(--cell-size) var(--cell-size);
-
-  /*
-   * Muito importante:
-   *
-   * não cortamos os personagens
-   * nas extremidades.
-   *
-   * A cabeça da Verdyka é ligeiramente
-   * maior que uma célula.
-   */
+    var(--cell-size)
+      var(--cell-size),
+    var(--cell-size)
+      var(--cell-size),
+    var(--cell-size)
+      var(--cell-size);
 
   overflow: visible;
 
@@ -73,7 +109,7 @@
 }
 
 /* =========================================================
-   BORDA EXTERNA
+   MOLDURA EXTERNA
    ========================================================= */
 
 .game-board::after {
@@ -82,18 +118,35 @@
   position: absolute;
 
   /*
-   * A borda agora fica FORA
-   * da área lógica do tabuleiro.
-   *
-   * Assim ela não invade nenhuma
-   * das 24 × 24 células.
+   * 5 px de espaço livre
+   * +
+   * 10 px da própria moldura.
    */
 
-  inset: -2px;
+  inset:
+    calc(
+      -1 *
+      (
+        var(--board-frame-gap) +
+        var(--board-frame-width)
+      )
+    );
 
-  border: 2px solid var(--color-board-border);
+  border:
+    var(--board-frame-width)
+    solid
+    var(--color-board-border);
 
-  border-radius: 24px;
+  /*
+   * Raio propositalmente próximo
+   * da espessura da borda.
+   *
+   * Resultado:
+   * exterior arredondado,
+   * interior praticamente quadrado.
+   */
+
+  border-radius: 12px;
 
   pointer-events: none;
 
@@ -101,11 +154,10 @@
 }
 
 /* =========================================================
-   SEGURANÇA DE LAYOUT
+   BOX MODEL
    ========================================================= */
 
 .game-board,
-.game-board::before,
 .game-board::after {
   box-sizing: border-box;
 }

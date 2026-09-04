@@ -12,6 +12,8 @@ const MOUSE_POSITION = {
   y: 8,
 };
 
+const gameBoard = document.querySelector(".game-board");
+
 const snakeLayer = document.querySelector(".snake-layer");
 
 const mouseFood = document.querySelector(".mouse-food");
@@ -42,6 +44,10 @@ let queuedDirection = {
 };
 
 let lastMoveTime = performance.now();
+
+let isGameOver = false;
+
+let gameOverReason = null;
 
 /* =========================================================
    CONTROLLERS
@@ -116,21 +122,13 @@ function moveMouseToRandomCell() {
 }
 
 /* =========================================================
-   RATO — RESET DO ATOR
+   RATO — RESET VISUAL
    ========================================================= */
 
 function resetMouseActor() {
   if (!mouseActor) {
     return;
   }
-
-  /*
-   * Cancela somente animações
-   * temporárias aplicadas via JS.
-   *
-   * O container .mouse-food nunca
-   * recebe transform ou scale aqui.
-   */
 
   mouseActor.getAnimations().forEach((animation) => {
     animation.cancel();
@@ -146,10 +144,14 @@ function resetMouseActor() {
 }
 
 /* =========================================================
-   RATO — RESPAWN
+   RATO — RESPAWN INSTANTÂNEO
    ========================================================= */
 
 function respawnMouseInstantly() {
+  if (isGameOver) {
+    return;
+  }
+
   if (!mouseActor) {
     moveMouseToRandomCell();
 
@@ -158,48 +160,15 @@ function respawnMouseInstantly() {
     return;
   }
 
-  /*
-   * O desenho do rato fica oculto.
-   *
-   * O .mouse-food continua existindo,
-   * mas não existe rato visível nele
-   * durante a troca de coordenada.
-   */
-
   mouseActor.style.visibility = "hidden";
-
-  /*
-   * Muda a posição do CONTAINER.
-   *
-   * Não existe animação no container.
-   */
 
   moveMouseToRandomCell();
 
   mouseController.update(snake[0]);
 
-  /*
-   * Força a nova posição a ser
-   * calculada enquanto o ator ainda
-   * está invisível.
-   */
-
   void mouseFood.offsetWidth;
 
-  /*
-   * Resetamos a animação da mordida.
-   */
-
   resetMouseActor();
-
-  /*
-   * O rato já nasce completamente
-   * formado na nova célula.
-   *
-   * Sem fade.
-   * Sem scale.
-   * Sem trajetória.
-   */
 
   mouseActor.style.visibility = "visible";
 }
@@ -209,20 +178,14 @@ function respawnMouseInstantly() {
    ========================================================= */
 
 function consumeMouseVisually() {
+  if (isGameOver) {
+    return;
+  }
+
   if (!mouseActor) {
     respawnMouseInstantly();
     return;
   }
-
-  /*
-   * Importante:
-   *
-   * somente .mouse-actor é animado.
-   *
-   * .mouse-food continua imóvel
-   * na célula lógica durante toda
-   * a mordida.
-   */
 
   const animation = mouseActor.animate(
     [
@@ -261,6 +224,10 @@ function consumeMouseVisually() {
 
   animation.finished
     .then(() => {
+      if (isGameOver) {
+        return;
+      }
+
       respawnMouseInstantly();
     })
     .catch(() => {});
@@ -285,10 +252,75 @@ function getTurnSide(current, next) {
 }
 
 /* =========================================================
+   COLISÃO — PAREDES
+   ========================================================= */
+
+function willHitWall(position) {
+  return (
+    position.x < 0 ||
+    position.x >= GRID_SIZE ||
+    position.y < 0 ||
+    position.y >= GRID_SIZE
+  );
+}
+
+/* =========================================================
+   COLISÃO — PRÓPRIO CORPO
+   ========================================================= */
+
+function willHitSelf(position) {
+  /*
+   * A última posição da cauda
+   * será abandonada neste mesmo
+   * movimento.
+   *
+   * Por isso ela não deve contar
+   * como colisão.
+   */
+
+  const bodyWithoutTail = snake.slice(1, -1);
+
+  return bodyWithoutTail.some((segment) => isSamePosition(segment, position));
+}
+
+/* =========================================================
+   GAME OVER
+   ========================================================= */
+
+function endGame(reason) {
+  if (isGameOver) {
+    return;
+  }
+
+  isGameOver = true;
+  gameOverReason = reason;
+
+  inputController.stop();
+
+  gameBoard?.setAttribute("data-game-state", "game-over");
+
+  gameBoard?.setAttribute("data-game-over-reason", reason);
+
+  /*
+   * Por enquanto a morte apenas
+   * interrompe o jogo.
+   *
+   * Mais tarde esses estados servirão
+   * para animação e tela de Game Over.
+   */
+
+  console.info(`JARAKA — Game Over: ${gameOverReason}`);
+}
+
+/* =========================================================
    CRESCIMENTO
    ========================================================= */
 
 function growSnake() {
+  if (isGameOver) {
+    return;
+  }
+
   const previousTail = previousSnake[previousSnake.length - 1];
 
   const currentTail = snake[snake.length - 1];
@@ -318,17 +350,24 @@ function didEatMouse() {
    ========================================================= */
 
 function startEatingSequence() {
-  /*
-   * Mordida e digestão acontecem
-   * paralelamente ao gameplay.
-   */
+  if (isGameOver) {
+    return;
+  }
 
   snakeRenderer.triggerEatingSequence({
     onMouseEnter: () => {
+      if (isGameOver) {
+        return;
+      }
+
       consumeMouseVisually();
     },
 
     onSwallowComplete: () => {
+      if (isGameOver) {
+        return;
+      }
+
       growSnake();
     },
   });
@@ -347,9 +386,9 @@ function handleMouseCollision() {
    ========================================================= */
 
 function moveSnake() {
-  previousSnake = snake.map((segment) => ({
-    ...segment,
-  }));
+  if (isGameOver) {
+    return;
+  }
 
   direction = queuedDirection;
 
@@ -362,6 +401,34 @@ function moveSnake() {
 
     y: head.y + direction.y,
   };
+
+  /* -------------------------------------------------------
+     COLISÃO COM PAREDE
+     ------------------------------------------------------- */
+
+  if (willHitWall(newHead)) {
+    endGame("wall");
+
+    return;
+  }
+
+  /* -------------------------------------------------------
+     COLISÃO COM O PRÓPRIO CORPO
+     ------------------------------------------------------- */
+
+  if (willHitSelf(newHead)) {
+    endGame("self");
+
+    return;
+  }
+
+  /* -------------------------------------------------------
+     MOVIMENTO VÁLIDO
+     ------------------------------------------------------- */
+
+  previousSnake = snake.map((segment) => ({
+    ...segment,
+  }));
 
   for (let index = snake.length - 1; index > 0; index -= 1) {
     snake[index] = {
@@ -387,8 +454,16 @@ function moveSnake() {
    ========================================================= */
 
 function gameLoop(timestamp) {
+  if (isGameOver) {
+    return;
+  }
+
   while (timestamp - lastMoveTime >= MOVE_INTERVAL) {
     moveSnake();
+
+    if (isGameOver) {
+      return;
+    }
 
     lastMoveTime += MOVE_INTERVAL;
   }
@@ -405,6 +480,10 @@ function gameLoop(timestamp) {
    ========================================================= */
 
 function queueDirection(candidate) {
+  if (isGameOver) {
+    return false;
+  }
+
   if (isSameDirection(candidate, direction)) {
     return false;
   }
@@ -431,7 +510,7 @@ function queueDirection(candidate) {
 function handleDirectionChange(candidate) {
   const accepted = queueDirection(candidate);
 
-  if (!accepted) {
+  if (!accepted && !isGameOver) {
     inputController.unlock();
   }
 }

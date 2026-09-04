@@ -34,7 +34,6 @@
   );
 
   will-change: transform;
-
   backface-visibility: hidden;
 }
 
@@ -44,6 +43,8 @@
 
 .snake-core {
   position: relative;
+
+  z-index: 2;
 
   width: 100%;
   height: 100%;
@@ -90,10 +91,12 @@
   background: rgba(255, 255, 255, 0.28);
 
   filter: blur(0.4px);
+
+  pointer-events: none;
 }
 
 /* =========================================================
-   FORMATO DOS SEGMENTOS
+   FORMATOS DOS SEGMENTOS
    ========================================================= */
 
 .snake-core.is-horizontal {
@@ -233,7 +236,7 @@
 }
 
 /* =========================================================
-   BOCA — ESTADO NORMAL
+   BOCA — NORMAL
    ========================================================= */
 
 .snake-mouth {
@@ -345,25 +348,19 @@
     0 0,
     100% 0,
     100% 18%,
-
     90% 18%,
     84% 88%,
     75% 18%,
-
     66% 18%,
     59% 100%,
     50% 18%,
-
     41% 18%,
     34% 100%,
     25% 18%,
-
     16% 18%,
     10% 88%,
     0 18%
   );
-
-  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.36));
 }
 
 /* =========================================================
@@ -389,25 +386,19 @@
     0 100%,
     100% 100%,
     100% 82%,
-
     90% 82%,
     84% 12%,
     75% 82%,
-
     66% 82%,
     59% 0,
     50% 82%,
-
     41% 82%,
     34% 0,
     25% 82%,
-
     16% 82%,
     10% 12%,
     0 82%
   );
-
-  filter: drop-shadow(0 -1px 1px rgba(0, 0, 0, 0.36));
 }
 
 /* =========================================================
@@ -416,7 +407,6 @@
 
 .snake-head.is-biting .snake-eye {
   top: 18%;
-
   width: 19%;
 }
 
@@ -583,83 +573,31 @@
 
 .snake-head.is-chewing .snake-eye {
   top: 24%;
-
   width: 21%;
 }
 
-.snake-head.is-chewing .snake-eye--left {
-  animation: snake-chew-eye-left 900ms ease-in-out both;
-}
-
+.snake-head.is-chewing .snake-eye--left,
 .snake-head.is-chewing .snake-eye--right {
-  animation: snake-chew-eye-right 900ms ease-in-out both;
+  animation: snake-chew-eye 900ms ease-in-out both;
 }
 
-@keyframes snake-chew-eye-left {
+@keyframes snake-chew-eye {
   0%,
   100% {
     transform: translate3d(var(--eye-x, 0), var(--eye-y, 0), 0);
   }
 
-  12% {
-    transform: translate3d(var(--eye-x, 0), calc(var(--eye-y, 0) + 1px), 0)
-      scale(1.04, 0.7);
-  }
-
-  22% {
-    transform: translate3d(var(--eye-x, 0), var(--eye-y, 0), 0) scale(1, 1);
-  }
-
-  34% {
-    transform: translate3d(var(--eye-x, 0), calc(var(--eye-y, 0) + 1px), 0)
-      scale(1.04, 0.7);
-  }
-
-  46% {
-    transform: translate3d(var(--eye-x, 0), var(--eye-y, 0), 0) scale(1, 1);
-  }
-
+  12%,
+  34%,
   58% {
     transform: translate3d(var(--eye-x, 0), calc(var(--eye-y, 0) + 1px), 0)
-      scale(1.04, 0.72);
-  }
-
-  72% {
-    transform: translate3d(var(--eye-x, 0), var(--eye-y, 0), 0) scale(1, 1);
-  }
-}
-
-@keyframes snake-chew-eye-right {
-  0%,
-  100% {
-    transform: translate3d(var(--eye-x, 0), var(--eye-y, 0), 0);
-  }
-
-  12% {
-    transform: translate3d(var(--eye-x, 0), calc(var(--eye-y, 0) + 1px), 0)
       scale(1.04, 0.7);
   }
 
-  22% {
-    transform: translate3d(var(--eye-x, 0), var(--eye-y, 0), 0) scale(1, 1);
-  }
-
-  34% {
-    transform: translate3d(var(--eye-x, 0), calc(var(--eye-y, 0) + 1px), 0)
-      scale(1.04, 0.7);
-  }
-
-  46% {
-    transform: translate3d(var(--eye-x, 0), var(--eye-y, 0), 0) scale(1, 1);
-  }
-
-  58% {
-    transform: translate3d(var(--eye-x, 0), calc(var(--eye-y, 0) + 1px), 0)
-      scale(1.04, 0.72);
-  }
-
+  22%,
+  46%,
   72% {
-    transform: translate3d(var(--eye-x, 0), var(--eye-y, 0), 0) scale(1, 1);
+    transform: translate3d(var(--eye-x, 0), var(--eye-y, 0), 0) scale(1);
   }
 }
 
@@ -686,18 +624,13 @@
 }
 
 /* =========================================================
-   DEGLUTIÇÃO — ESTADO
+   DEGLUTIÇÃO
    ========================================================= */
 
 .snake-core.is-swallowing {
   z-index: 8;
-
   transition: none;
 }
-
-/* =========================================================
-   DEGLUTIÇÃO — HORIZONTAL
-   ========================================================= */
 
 .snake-core.is-horizontal.is-swallowing {
   animation: swallow-horizontal 240ms cubic-bezier(0.22, 0.88, 0.28, 1) both;
@@ -729,10 +662,6 @@
   }
 }
 
-/* =========================================================
-   DEGLUTIÇÃO — VERTICAL
-   ========================================================= */
-
 .snake-core.is-vertical.is-swallowing {
   animation: swallow-vertical 240ms cubic-bezier(0.22, 0.88, 0.28, 1) both;
 }
@@ -762,10 +691,6 @@
     transform: scale(0.975, 1.025);
   }
 }
-
-/* =========================================================
-   DEGLUTIÇÃO — CURVA
-   ========================================================= */
 
 .snake-core.is-corner.is-swallowing {
   animation: swallow-corner 240ms cubic-bezier(0.22, 0.88, 0.28, 1) both;
@@ -798,7 +723,7 @@
 }
 
 /* =========================================================
-   CHEGADA À CAUDA
+   CRESCIMENTO
    ========================================================= */
 
 .snake-core.is-growth-arrival {
