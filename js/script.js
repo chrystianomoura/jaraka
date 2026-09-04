@@ -7,6 +7,24 @@ import { createSnakeRenderer } from "./snake.js";
 const GRID_SIZE = 16;
 const MOVE_INTERVAL = 180;
 
+/*
+ * O crescimento visual de uma célula
+ * é absorvido gradualmente.
+ *
+ * 7 ticks:
+ * cauda ≈ 85,7% da velocidade normal.
+ *
+ * Isso mantém o crescimento perceptualmente
+ * contínuo sem produzir parada ou desaceleração
+ * brusca na extremidade.
+ */
+
+const VISUAL_GROWTH_RELEASE_TICKS = 7;
+
+const VISUAL_GROWTH_RELEASE_STEP = 1 / VISUAL_GROWTH_RELEASE_TICKS;
+
+const EPSILON = 0.0001;
+
 const MOUSE_POSITION = {
   x: 12,
   y: 7,
@@ -20,6 +38,10 @@ const mouseFood = document.querySelector(".mouse-food");
 
 const mouseActor = mouseFood?.querySelector(".mouse-actor");
 
+/* =========================================================
+   COBRA — ESTADO LÓGICO
+   ========================================================= */
+
 let snake = [
   { x: 9, y: 8 },
   { x: 8, y: 8 },
@@ -29,9 +51,38 @@ let snake = [
   { x: 4, y: 8 },
 ];
 
-let previousSnake = snake.map((segment) => ({
-  ...segment,
-}));
+/* =========================================================
+   COBRA — ESTADO VISUAL
+   ========================================================= */
+
+function cloneSnake(source) {
+  return source.map((segment) => ({
+    ...segment,
+  }));
+}
+
+let renderSnake = cloneSnake(snake);
+
+let previousRenderSnake = cloneSnake(renderSnake);
+
+/*
+ * Distância, em células, que a cauda
+ * visual está à frente da cauda lógica.
+ *
+ * Quando ocorre crescimento lógico,
+ * a cauda lógica deixa de avançar uma
+ * célula naquele tick.
+ *
+ * Em vez de deixar a cauda visual parar,
+ * registramos essa diferença aqui e a
+ * absorvemos aos poucos.
+ */
+
+let visualGrowthOffset = 0;
+
+/* =========================================================
+   DIREÇÃO
+   ========================================================= */
 
 let direction = {
   x: 1,
@@ -43,11 +94,21 @@ let queuedDirection = {
   y: 0,
 };
 
+/* =========================================================
+   LOOP
+   ========================================================= */
+
 let lastMoveTime = performance.now();
 
 let isGameOver = false;
 
 let gameOverReason = null;
+
+/* =========================================================
+   CRESCIMENTO LÓGICO
+   ========================================================= */
+
+let pendingGrowth = 0;
 
 /* =========================================================
    CONTROLLERS
@@ -72,6 +133,14 @@ function isSamePosition(first, second) {
 
 function isSnakePosition(position) {
   return snake.some((segment) => isSamePosition(segment, position));
+}
+
+/* =========================================================
+   INTERPOLAÇÃO
+   ========================================================= */
+
+function lerp(start, end, progress) {
+  return start + (end - start) * progress;
 }
 
 /* =========================================================
@@ -196,6 +265,7 @@ function consumeMouseVisually() {
 
   if (!mouseActor) {
     respawnMouseInstantly();
+
     return;
   }
 
@@ -280,19 +350,11 @@ function willHitWall(position) {
    COLISÃO — PRÓPRIO CORPO
    ========================================================= */
 
-function willHitSelf(position) {
-  /*
-   * A última posição da cauda
-   * será abandonada neste mesmo
-   * movimento.
-   *
-   * Por isso ela não deve contar
-   * como colisão.
-   */
+function willHitSelf(position, willGrow = false) {
+  const body =
+    pendingGrowth > 0 || willGrow ? snake.slice(1) : snake.slice(1, -1);
 
-  const bodyWithoutTail = snake.slice(1, -1);
-
-  return bodyWithoutTail.some((segment) => isSamePosition(segment, position));
+  return body.some((segment) => isSamePosition(segment, position));
 }
 
 /* =========================================================
@@ -314,58 +376,153 @@ function endGame(reason) {
 
   gameBoard?.setAttribute("data-game-over-reason", reason);
 
-  /*
-   * Por enquanto a morte apenas
-   * interrompe o jogo.
-   *
-   * Mais tarde esses estados servirão
-   * para animação e tela de Game Over.
-   */
-
   console.info(`JARAKA — Game Over: ${gameOverReason}`);
 }
 
 /* =========================================================
-   CRESCIMENTO
+   CRESCIMENTO — FILA
    ========================================================= */
 
-function growSnake() {
+function queueGrowth() {
   if (isGameOver) {
     return;
   }
 
-  const previousTail = previousSnake[previousSnake.length - 1];
-
-  const currentTail = snake[snake.length - 1];
-
-  const tailPosition = previousTail ?? currentTail;
-
-  snake.push({
-    x: tailPosition.x,
-    y: tailPosition.y,
-  });
-
-  snakeRenderer.updateSegmentShapes(snake, direction);
-
-  snakeRenderer.triggerGrowthArrival();
+  pendingGrowth += 1;
 }
 
 /* =========================================================
-   COLISÃO COM O RATO
+   CRESCIMENTO — APLICAÇÃO LÓGICA
    ========================================================= */
 
-function didEatMouse() {
-  return isSamePosition(snake[0], MOUSE_POSITION);
+function applyPendingGrowth(tailBeforeMove) {
+  if (pendingGrowth <= 0 || !tailBeforeMove) {
+    return false;
+  }
+
+  snake.push({
+    x: tailBeforeMove.x,
+    y: tailBeforeMove.y,
+  });
+
+  pendingGrowth -= 1;
+
+  return true;
 }
 
 /* =========================================================
-   EVENTO DE ALIMENTAÇÃO
+   CRESCIMENTO — CAUDA VISUAL
+   ========================================================= */
+
+/*
+ * Constrói uma cópia visual da cobra
+ * com a extremidade deslocada para frente
+ * ao longo da própria trajetória do grid.
+ *
+ * O offset pode ser maior que 1.
+ *
+ * Isso é importante porque um segundo rato
+ * pode ser consumido antes que o crescimento
+ * visual anterior tenha sido completamente
+ * absorvido.
+ */
+
+function createVisualSnake(source, tailOffset) {
+  const result = cloneSnake(source);
+
+  if (result.length < 2 || tailOffset <= EPSILON) {
+    return result;
+  }
+
+  let remainingOffset = Math.min(tailOffset, Math.max(0, result.length - 2));
+
+  /*
+   * Cada unidade inteira do offset
+   * remove visualmente uma célula completa
+   * da extremidade.
+   *
+   * A cobra lógica não é alterada.
+   */
+
+  while (remainingOffset >= 1 - EPSILON && result.length > 2) {
+    result.pop();
+
+    remainingOffset -= 1;
+  }
+
+  /*
+   * A fração restante posiciona a ponta
+   * entre a célula atual da cauda e a
+   * célula imediatamente anterior.
+   */
+
+  if (remainingOffset > EPSILON && result.length >= 2) {
+    const tailIndex = result.length - 1;
+
+    const tail = result[tailIndex];
+
+    const beforeTail = result[tailIndex - 1];
+
+    result[tailIndex] = {
+      x: lerp(tail.x, beforeTail.x, remainingOffset),
+
+      y: lerp(tail.y, beforeTail.y, remainingOffset),
+    };
+  }
+
+  return result;
+}
+
+/* =========================================================
+   CRESCIMENTO — ATUALIZAÇÃO VISUAL
+   ========================================================= */
+
+function updateVisualGrowth(didGrow) {
+  /*
+   * Quando a cobra cresce logicamente,
+   * a cauda deixou de avançar uma célula.
+   *
+   * Adicionamos essa célula ao débito
+   * visual.
+   */
+
+  if (didGrow) {
+    visualGrowthOffset += 1;
+  }
+
+  /*
+   * No MESMO tick já liberamos uma fração.
+   *
+   * Portanto a cauda nunca experimenta
+   * um frame de velocidade zero.
+   */
+
+  if (visualGrowthOffset > EPSILON) {
+    visualGrowthOffset = Math.max(
+      0,
+      visualGrowthOffset - VISUAL_GROWTH_RELEASE_STEP,
+    );
+  }
+
+  renderSnake = createVisualSnake(snake, visualGrowthOffset);
+}
+
+/* =========================================================
+   ALIMENTAÇÃO
    ========================================================= */
 
 function startEatingSequence() {
   if (isGameOver) {
     return;
   }
+
+  /*
+   * Aqui ficam somente os efeitos
+   * visuais da alimentação.
+   *
+   * O crescimento lógico já foi
+   * tratado dentro do movimento.
+   */
 
   snakeRenderer.triggerEatingSequence({
     onMouseEnter: () => {
@@ -381,17 +538,11 @@ function startEatingSequence() {
         return;
       }
 
-      growSnake();
+      /*
+       * Final exclusivamente visual.
+       */
     },
   });
-}
-
-function handleMouseCollision() {
-  if (!didEatMouse()) {
-    return;
-  }
-
-  startEatingSequence();
 }
 
 /* =========================================================
@@ -415,6 +566,13 @@ function moveSnake() {
     y: head.y + direction.y,
   };
 
+  /*
+   * Detectamos a alimentação antes
+   * de efetivar o movimento.
+   */
+
+  const willEatMouse = isSamePosition(newHead, MOUSE_POSITION);
+
   /* -------------------------------------------------------
      COLISÃO COM PAREDE
      ------------------------------------------------------- */
@@ -429,19 +587,37 @@ function moveSnake() {
      COLISÃO COM O PRÓPRIO CORPO
      ------------------------------------------------------- */
 
-  if (willHitSelf(newHead)) {
+  if (willHitSelf(newHead, willEatMouse)) {
     endGame("self");
 
     return;
   }
 
   /* -------------------------------------------------------
-     MOVIMENTO VÁLIDO
+     CRESCIMENTO — MESMO TICK
      ------------------------------------------------------- */
 
-  previousSnake = snake.map((segment) => ({
-    ...segment,
-  }));
+  if (willEatMouse) {
+    queueGrowth();
+  }
+
+  /* -------------------------------------------------------
+     SNAPSHOT VISUAL
+     ------------------------------------------------------- */
+
+  previousRenderSnake = cloneSnake(renderSnake);
+
+  /* -------------------------------------------------------
+     CAUDA ANTES DO MOVIMENTO
+     ------------------------------------------------------- */
+
+  const tailBeforeMove = {
+    ...snake[snake.length - 1],
+  };
+
+  /* -------------------------------------------------------
+     MOVIMENTO DOS SEGMENTOS
+     ------------------------------------------------------- */
 
   for (let index = snake.length - 1; index > 0; index -= 1) {
     snake[index] = {
@@ -453,13 +629,35 @@ function moveSnake() {
 
   snake[0] = newHead;
 
+  /* -------------------------------------------------------
+     CRESCIMENTO LÓGICO
+     ------------------------------------------------------- */
+
+  const didGrow = applyPendingGrowth(tailBeforeMove);
+
+  /* -------------------------------------------------------
+     CRESCIMENTO VISUAL
+     ------------------------------------------------------- */
+
+  updateVisualGrowth(didGrow);
+
+  /* -------------------------------------------------------
+     RENDERER
+     ------------------------------------------------------- */
+
   snakeRenderer.updateSegmentShapes(snake, direction);
 
   snakeRenderer.updateHeadDirection(direction);
 
   mouseController.update(snake[0]);
 
-  handleMouseCollision();
+  /* -------------------------------------------------------
+     ALIMENTAÇÃO VISUAL
+     ------------------------------------------------------- */
+
+  if (willEatMouse) {
+    startEatingSequence();
+  }
 }
 
 /* =========================================================
@@ -483,7 +681,7 @@ function gameLoop(timestamp) {
 
   const progress = Math.min((timestamp - lastMoveTime) / MOVE_INTERVAL, 1);
 
-  snakeRenderer.render(snake, previousSnake, progress);
+  snakeRenderer.render(renderSnake, previousRenderSnake, progress);
 
   requestAnimationFrame(gameLoop);
 }
@@ -544,7 +742,7 @@ snakeRenderer.create(snake, direction);
 
 mouseController.update(snake[0]);
 
-snakeRenderer.render(snake, previousSnake, 0);
+snakeRenderer.render(renderSnake, previousRenderSnake, 0);
 
 inputController.start();
 

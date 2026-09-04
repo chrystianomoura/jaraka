@@ -5,10 +5,15 @@
    Responsabilidades:
    - camada da cobra;
    - SVG do corpo contínuo;
-   - path da trajetória;
-   - posicionamento visual;
-   - base visual compartilhada;
-   - formatos horizontal, vertical e corner.
+   - path principal;
+   - cauda afunilada;
+   - paths auxiliares de profundidade e highlight.
+
+   Este módulo não controla:
+   - cabeça;
+   - rosto;
+   - posicionamento da cabeça;
+   - alimentação.
    ========================================================= */
 
 /* =========================================================
@@ -32,15 +37,21 @@
   height: 100%;
 
   overflow: visible;
+
   pointer-events: none;
 
   z-index: 2;
 }
 
+/* =========================================================
+   CORPO PRINCIPAL
+   ========================================================= */
+
 .snake-body-path {
   fill: none;
 
   stroke: var(--color-verdyka);
+
   stroke-width: 0.92;
 
   stroke-linecap: round;
@@ -51,102 +62,35 @@
 }
 
 /* =========================================================
-   POSIÇÃO VISUAL
+   CAUDA AFUNILADA
    ========================================================= */
 
-.snake-part {
-  position: absolute;
-
-  --part-size: 0.92;
-
-  --part-offset: calc((1 - var(--part-size)) * var(--cell-size) / 2);
-
-  width: calc(var(--cell-size) * var(--part-size));
-
-  height: calc(var(--cell-size) * var(--part-size));
-
-  transform: translate3d(
-    calc(var(--visual-x) * var(--cell-size) + var(--part-offset)),
-    calc(var(--visual-y) * var(--cell-size) + var(--part-offset)),
-    0
-  );
-
-  will-change: transform;
-  backface-visibility: hidden;
+.snake-tail {
+  pointer-events: none;
 }
 
-/* =========================================================
-   BASE VISUAL
-   ========================================================= */
+.snake-tail-segment {
+  fill: none;
 
-.snake-core {
-  position: relative;
+  stroke: var(--color-verdyka);
 
-  z-index: 2;
-
-  width: 100%;
-  height: 100%;
-
-  overflow: visible;
-
-  border-radius: 30%;
-
-  background: linear-gradient(
-    145deg,
-    var(--color-verdyka-highlight) 0%,
-    var(--color-verdyka) 42%,
-    var(--color-verdyka-shadow) 100%
-  );
-
-  box-shadow:
-    0 0 7px rgba(57, 255, 106, 0.28),
-    0 0 14px rgba(57, 255, 106, 0.12);
-
-  transform: scale(1);
-
-  transform-origin: 50% 50%;
-
-  transition:
-    transform 110ms ease-out,
-    border-radius 110ms ease-out;
-
-  will-change: transform;
-}
-
-.snake-core::before {
-  content: "";
-
-  position: absolute;
-
-  top: 12%;
-  left: 16%;
-
-  width: 44%;
-  height: 16%;
-
-  border-radius: 999px;
-
-  background: rgba(255, 255, 255, 0.28);
-
-  filter: blur(0.4px);
+  stroke-linecap: round;
+  stroke-linejoin: round;
 
   pointer-events: none;
 }
 
 /* =========================================================
-   FORMATOS
+   PATHS AUXILIARES
+
+   Continuam desligados nesta etapa.
    ========================================================= */
 
-.snake-core.is-horizontal {
-  transform: scale(1.025, 0.975);
-}
+.snake-body-depth,
+.snake-body-highlight {
+  fill: none;
 
-.snake-core.is-vertical {
-  transform: scale(0.975, 1.025);
-}
+  stroke: none;
 
-.snake-core.is-corner {
-  transform: scale(1.035);
-
-  border-radius: 35%;
+  pointer-events: none;
 }

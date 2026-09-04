@@ -3,7 +3,7 @@
    Estado visual e reação do rato à proximidade da cobra
    ========================================================= */
 
-const MOUSE_SCARED_DISTANCE = 4;
+const MOUSE_SCARED_DISTANCE = 3;
 
 const EXPRESSION_CLASSES = ["is-normal", "is-angry", "is-scared", "is-happy"];
 

@@ -7,8 +7,7 @@
    - mordida;
    - mastigação;
    - onda de deglutição;
-   - pulso de deglutição;
-   - chegada do crescimento na cauda;
+   - adaptação da deglutição à cauda afinada;
    - sequência completa de alimentação.
 
    Este módulo não controla:
@@ -21,7 +20,37 @@
 const SVG_NAMESPACE = "http://www.w3.org/2000/svg";
 
 /* =========================================================
-   ESTADOS DO ROSTO
+   DEGLUTIÇÃO — CONFIGURAÇÃO
+   ========================================================= */
+
+const TAIL_START_RATIO = 0.62;
+
+const SWALLOW_END_RATIO = 0.94;
+
+const BODY_SWALLOW_RADIUS = 0.55;
+
+const TAIL_SWALLOW_RADIUS = 0.16;
+
+/* =========================================================
+   UTILITÁRIOS
+   ========================================================= */
+
+function clamp(value, minimum, maximum) {
+  return Math.max(minimum, Math.min(value, maximum));
+}
+
+function lerp(start, end, progress) {
+  return start + (end - start) * progress;
+}
+
+function smoothstep(progress) {
+  const safeProgress = clamp(progress, 0, 1);
+
+  return safeProgress * safeProgress * (3 - 2 * safeProgress);
+}
+
+/* =========================================================
+   ESTADOS DA CABEÇA
    ========================================================= */
 
 function clearEatingFaceStates(headElement) {
@@ -31,10 +60,6 @@ function clearEatingFaceStates(headElement) {
 
   headElement.classList.remove("is-biting", "is-bite-closing", "is-chewing");
 }
-
-/* =========================================================
-   MORDIDA
-   ========================================================= */
 
 export function triggerBite(headElement) {
   if (!headElement) {
@@ -55,10 +80,6 @@ export function triggerBiteClose(headElement) {
 
   headElement.classList.add("is-bite-closing");
 }
-
-/* =========================================================
-   MASTIGAÇÃO
-   ========================================================= */
 
 export function triggerChew(headElement) {
   if (!headElement) {
@@ -85,29 +106,58 @@ export function finishBite(headElement) {
 }
 
 /* =========================================================
-   POSIÇÃO SOBRE O CORPO
+   GEOMETRIA DO BODY PATH
    ========================================================= */
 
-function getBodyPointAtRatio(bodyPath, ratio) {
+function getBodyLength({ bodyPath, getCachedLength }) {
   if (!bodyPath) {
+    return 0;
+  }
+
+  /*
+   * Primeira opção:
+   * comprimento produzido pelo renderer
+   * no frame mais recente.
+   */
+
+  const cachedLength = getCachedLength?.();
+
+  if (Number.isFinite(cachedLength) && cachedLength > 0) {
+    return cachedLength;
+  }
+
+  /*
+   * Fallback apenas para situações
+   * em que ainda não houve render válido.
+   */
+
+  try {
+    const measuredLength = bodyPath.getTotalLength();
+
+    if (Number.isFinite(measuredLength) && measuredLength > 0) {
+      return measuredLength;
+    }
+  } catch {
+    return 0;
+  }
+
+  return 0;
+}
+
+function getBodyPointAtRatio({ bodyPath, ratio, totalLength }) {
+  if (!bodyPath || !Number.isFinite(totalLength) || totalLength <= 0) {
     return null;
   }
 
-  let totalLength = 0;
+  const safeRatio = clamp(ratio, 0, 1);
+
+  let point = null;
 
   try {
-    totalLength = bodyPath.getTotalLength();
+    point = bodyPath.getPointAtLength(totalLength * safeRatio);
   } catch {
     return null;
   }
-
-  if (!Number.isFinite(totalLength) || totalLength <= 0) {
-    return null;
-  }
-
-  const safeRatio = Math.max(0, Math.min(ratio, 1));
-
-  const point = bodyPath.getPointAtLength(totalLength * safeRatio);
 
   return {
     x: point.x,
@@ -116,7 +166,40 @@ function getBodyPointAtRatio(bodyPath, ratio) {
 }
 
 /* =========================================================
-   ELEMENTO DE DEGLUTIÇÃO
+   RAIO DA DEGLUTIÇÃO
+   ========================================================= */
+
+function getSwallowRadius(ratio) {
+  if (ratio <= TAIL_START_RATIO) {
+    return BODY_SWALLOW_RADIUS;
+  }
+
+  const tailProgress =
+    (ratio - TAIL_START_RATIO) / (SWALLOW_END_RATIO - TAIL_START_RATIO);
+
+  const easedProgress = smoothstep(tailProgress);
+
+  return lerp(BODY_SWALLOW_RADIUS, TAIL_SWALLOW_RADIUS, easedProgress);
+}
+
+/* =========================================================
+   OPACIDADE FINAL
+   ========================================================= */
+
+function getSwallowOpacity(progress) {
+  const fadeStart = 0.82;
+
+  if (progress <= fadeStart) {
+    return 1;
+  }
+
+  const fadeProgress = (progress - fadeStart) / (1 - fadeStart);
+
+  return lerp(1, 0, smoothstep(fadeProgress));
+}
+
+/* =========================================================
+   VOLUME SVG
    ========================================================= */
 
 function createSwallowBulge(bodySvg) {
@@ -128,7 +211,7 @@ function createSwallowBulge(bodySvg) {
 
   bulge.classList.add("snake-swallow-bulge");
 
-  bulge.setAttribute("r", "0.55");
+  bulge.setAttribute("r", BODY_SWALLOW_RADIUS);
 
   bodySvg.appendChild(bulge);
 
@@ -136,7 +219,7 @@ function createSwallowBulge(bodySvg) {
 }
 
 /* =========================================================
-   DEGLUTIÇÃO — SEGMENTO
+   PULSO POR SEGMENTO
    ========================================================= */
 
 export function triggerSwallowSegment({
@@ -144,12 +227,24 @@ export function triggerSwallowSegment({
   bodyPath,
   latestSnakeLength,
   index,
+  getBodyLength: getCachedLength,
 }) {
   const bodyCount = Math.max(1, latestSnakeLength - 1);
 
-  const ratio = Math.max(0, Math.min(index / bodyCount, 1));
+  const rawRatio = clamp(index / bodyCount, 0, 1);
 
-  const point = getBodyPointAtRatio(bodyPath, ratio);
+  const ratio = Math.min(rawRatio, SWALLOW_END_RATIO);
+
+  const totalLength = getBodyLength({
+    bodyPath,
+    getCachedLength,
+  });
+
+  const point = getBodyPointAtRatio({
+    bodyPath,
+    ratio,
+    totalLength,
+  });
 
   if (!point) {
     return;
@@ -165,6 +260,8 @@ export function triggerSwallowSegment({
 
   bulge.setAttribute("cy", point.y);
 
+  bulge.setAttribute("r", getSwallowRadius(ratio));
+
   bulge.classList.add("is-pulsing");
 
   window.setTimeout(() => {
@@ -173,7 +270,7 @@ export function triggerSwallowSegment({
 }
 
 /* =========================================================
-   DEGLUTIÇÃO — ONDA
+   ONDA CONTÍNUA
    ========================================================= */
 
 export function triggerSwallowWave({
@@ -181,6 +278,7 @@ export function triggerSwallowWave({
   bodyPath,
   latestSnakeLength,
   segmentDelay = 92,
+  getBodyLength: getCachedLength,
   onComplete,
 } = {}) {
   const bodyCount = Math.max(1, latestSnakeLength - 1);
@@ -202,16 +300,37 @@ export function triggerSwallowWave({
       return;
     }
 
-    const progress = Math.min((timestamp - startedAt) / duration, 1);
+    const progress = clamp((timestamp - startedAt) / duration, 0, 1);
 
-    const ratio = 0.04 + progress * 0.96;
+    const ratio = 0.04 + progress * (SWALLOW_END_RATIO - 0.04);
 
-    const point = getBodyPointAtRatio(bodyPath, ratio);
+    /*
+     * O renderer já calculou
+     * getTotalLength() neste frame.
+     *
+     * Aqui apenas reutilizamos
+     * esse número.
+     */
+
+    const totalLength = getBodyLength({
+      bodyPath,
+      getCachedLength,
+    });
+
+    const point = getBodyPointAtRatio({
+      bodyPath,
+      ratio,
+      totalLength,
+    });
 
     if (point) {
       bulge.setAttribute("cx", point.x);
 
       bulge.setAttribute("cy", point.y);
+
+      bulge.setAttribute("r", getSwallowRadius(ratio));
+
+      bulge.style.opacity = getSwallowOpacity(progress);
     }
 
     if (progress < 1) {
@@ -222,46 +341,29 @@ export function triggerSwallowWave({
 
     bulge.remove();
 
-    onComplete?.();
+    requestAnimationFrame(() => {
+      onComplete?.();
+    });
   }
 
   requestAnimationFrame(animate);
 }
 
 /* =========================================================
-   CRESCIMENTO
+   CRESCIMENTO NA CAUDA
    ========================================================= */
 
-export function triggerGrowthArrival({ bodySvg, bodyPath }) {
-  if (!bodySvg) {
-    return;
-  }
-
-  const point = getBodyPointAtRatio(bodyPath, 1);
-
-  if (!point) {
-    return;
-  }
-
-  const arrival = document.createElementNS(SVG_NAMESPACE, "circle");
-
-  arrival.classList.add("snake-growth-arrival");
-
-  arrival.setAttribute("cx", point.x);
-
-  arrival.setAttribute("cy", point.y);
-
-  arrival.setAttribute("r", "0.45");
-
-  bodySvg.appendChild(arrival);
-
-  window.setTimeout(() => {
-    arrival.remove();
-  }, 300);
+export function triggerGrowthArrival() {
+  /*
+   * Sem elemento visual adicional.
+   *
+   * A própria atualização do corpo
+   * representa o crescimento.
+   */
 }
 
 /* =========================================================
-   SEQUÊNCIA COMPLETA DE ALIMENTAÇÃO
+   SEQUÊNCIA COMPLETA
    ========================================================= */
 
 export function triggerEatingSequence({
@@ -269,45 +371,29 @@ export function triggerEatingSequence({
   bodySvg,
   bodyPath,
   latestSnakeLength,
+  getBodyLength: getCachedLength,
   onMouseEnter,
   onSwallowComplete,
 } = {}) {
-  /*
-   * 0 ms
-   * Abre a boca.
-   */
-
   triggerBite(headElement);
-
-  /*
-   * 115 ms
-   * Rato entra.
-   */
 
   window.setTimeout(() => {
     onMouseEnter?.();
   }, 115);
 
-  /*
-   * 300 ms
-   * Fecha a boca.
-   */
-
   window.setTimeout(() => {
     triggerBiteClose(headElement);
   }, 300);
-
-  /*
-   * 360 ms
-   * O volume começa a percorrer o corpo.
-   */
 
   window.setTimeout(() => {
     triggerSwallowWave({
       bodySvg,
       bodyPath,
       latestSnakeLength,
+
       segmentDelay: 92,
+
+      getBodyLength: getCachedLength,
 
       onComplete: () => {
         onSwallowComplete?.();
@@ -315,19 +401,9 @@ export function triggerEatingSequence({
     });
   }, 360);
 
-  /*
-   * 440 ms
-   * Mastigação.
-   */
-
   window.setTimeout(() => {
     triggerChew(headElement);
   }, 440);
-
-  /*
-   * 1340 ms
-   * Expressão normal.
-   */
 
   window.setTimeout(() => {
     finishChew(headElement);

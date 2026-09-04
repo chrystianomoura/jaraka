@@ -6,6 +6,7 @@
    - interpolação entre ticks;
    - posição visual da cabeça;
    - posição visual da cauda;
+   - travessia ortogonal da cauda em curvas;
    - construção dos pontos do corpo;
    - simplificação de retas;
    - arredondamento das curvas;
@@ -26,6 +27,14 @@ function lerp(start, end, progress) {
   return start + (end - start) * progress;
 }
 
+function interpolatePoint(start, end, progress) {
+  return {
+    x: lerp(start.x, end.x, progress),
+
+    y: lerp(start.y, end.y, progress),
+  };
+}
+
 /* =========================================================
    UTILITÁRIOS DE GEOMETRIA
    ========================================================= */
@@ -37,15 +46,36 @@ function isSamePoint(first, second) {
   );
 }
 
+function isHorizontal(first, second) {
+  return Math.abs(first.y - second.y) < EPSILON;
+}
+
+function isVertical(first, second) {
+  return Math.abs(first.x - second.x) < EPSILON;
+}
+
+function isOrthogonal(first, second) {
+  return isHorizontal(first, second) || isVertical(first, second);
+}
+
 function toCenter(position) {
   return {
     x: position.x + 0.5,
+
     y: position.y + 0.5,
   };
 }
 
 function getDistance(first, second) {
-  return Math.hypot(second.x - first.x, second.y - first.y);
+  return Math.hypot(
+    second.x - first.x,
+
+    second.y - first.y,
+  );
+}
+
+function getManhattanDistance(first, second) {
+  return Math.abs(second.x - first.x) + Math.abs(second.y - first.y);
 }
 
 /* =========================================================
@@ -65,18 +95,236 @@ export function getVisualHead(snake, previousSnake, progress) {
 }
 
 /* =========================================================
-   CAUDA
+   CAUDA — DETECÇÃO DE CURVA
    ========================================================= */
 
-function getVisualTail(snake, previousSnake, progress) {
+/*
+ * Durante crescimento visual gradual,
+ * a extremidade pode atravessar uma curva
+ * entre dois ticks.
+ *
+ * Exemplo:
+ *
+ * previousTail ---- corner
+ *                       |
+ *                       |
+ *                  currentTail
+ *
+ * previousTail e currentTail possuem
+ * X e Y diferentes.
+ *
+ * A interpolação linear comum produziria
+ * uma diagonal.
+ *
+ * Precisamos descobrir o vértice real
+ * por onde a cauda deve passar.
+ */
+
+function findTailCorner(snake, previousSnake, previousTail, currentTail) {
+  /*
+   * Se continuam no mesmo eixo,
+   * não existe curva para atravessar.
+   */
+
+  if (isOrthogonal(previousTail, currentTail)) {
+    return null;
+  }
+
+  const candidates = [];
+
+  const previousBeforeTail = previousSnake[previousSnake.length - 2];
+
+  const currentBeforeTail = snake[snake.length - 2];
+
+  if (previousBeforeTail) {
+    candidates.push(previousBeforeTail);
+  }
+
+  if (currentBeforeTail) {
+    candidates.push(currentBeforeTail);
+  }
+
+  /*
+   * Procuramos um ponto que esteja
+   * ortogonalmente conectado tanto
+   * à posição anterior quanto à atual.
+   */
+
+  const validCandidates = candidates.filter(
+    (candidate) =>
+      isOrthogonal(previousTail, candidate) &&
+      isOrthogonal(candidate, currentTail),
+  );
+
+  if (validCandidates.length === 0) {
+    return null;
+  }
+
+  /*
+   * Em caso de mais de um candidato,
+   * usamos a rota Manhattan mais curta.
+   */
+
+  let bestCandidate = validCandidates[0];
+
+  let bestDistance =
+    getManhattanDistance(previousTail, bestCandidate) +
+    getManhattanDistance(bestCandidate, currentTail);
+
+  for (let index = 1; index < validCandidates.length; index += 1) {
+    const candidate = validCandidates[index];
+
+    const distance =
+      getManhattanDistance(previousTail, candidate) +
+      getManhattanDistance(candidate, currentTail);
+
+    if (distance < bestDistance) {
+      bestDistance = distance;
+
+      bestCandidate = candidate;
+    }
+  }
+
+  return {
+    x: bestCandidate.x,
+
+    y: bestCandidate.y,
+  };
+}
+
+/* =========================================================
+   CAUDA — INTERPOLAÇÃO ORTOGONAL
+   ========================================================= */
+
+function getVisualTailState(snake, previousSnake, progress) {
   const currentTail = snake[snake.length - 1];
 
   const previousTail = previousSnake[previousSnake.length - 1] ?? currentTail;
 
-  return {
-    x: lerp(previousTail.x, currentTail.x, progress),
+  /*
+   * Movimento comum.
+   */
 
-    y: lerp(previousTail.y, currentTail.y, progress),
+  if (isOrthogonal(previousTail, currentTail)) {
+    return {
+      point: interpolatePoint(previousTail, currentTail, progress),
+
+      corner: null,
+
+      beforeCorner: false,
+    };
+  }
+
+  /*
+   * Movimento em que a ponta atravessa
+   * uma curva do corpo.
+   */
+
+  const corner = findTailCorner(
+    snake,
+    previousSnake,
+    previousTail,
+    currentTail,
+  );
+
+  /*
+   * Fallback defensivo.
+   *
+   * Se por algum estado inesperado
+   * não encontrarmos a curva, mantemos
+   * o comportamento tradicional.
+   */
+
+  if (!corner) {
+    return {
+      point: interpolatePoint(previousTail, currentTail, progress),
+
+      corner: null,
+
+      beforeCorner: false,
+    };
+  }
+
+  const firstLength = getManhattanDistance(previousTail, corner);
+
+  const secondLength = getManhattanDistance(corner, currentTail);
+
+  const totalLength = firstLength + secondLength;
+
+  if (totalLength <= EPSILON) {
+    return {
+      point: {
+        ...currentTail,
+      },
+
+      corner: null,
+
+      beforeCorner: false,
+    };
+  }
+
+  /*
+   * Em vez de interpolar X e Y
+   * simultaneamente, transformamos
+   * progress em distância percorrida
+   * sobre a rota ortogonal.
+   */
+
+  const traveledDistance = totalLength * progress;
+
+  /*
+   * PRIMEIRA PERNA:
+   *
+   * previousTail → corner
+   */
+
+  if (traveledDistance <= firstLength && firstLength > EPSILON) {
+    const localProgress = traveledDistance / firstLength;
+
+    return {
+      point: interpolatePoint(previousTail, corner, localProgress),
+
+      corner,
+
+      /*
+       * Enquanto a ponta ainda não
+       * chegou ao vértice, buildBodyPoints
+       * precisa manter esse vértice
+       * explicitamente no path.
+       */
+
+      beforeCorner: true,
+    };
+  }
+
+  /*
+   * SEGUNDA PERNA:
+   *
+   * corner → currentTail
+   */
+
+  if (secondLength <= EPSILON) {
+    return {
+      point: {
+        ...currentTail,
+      },
+
+      corner: null,
+
+      beforeCorner: false,
+    };
+  }
+
+  const secondDistance = Math.max(0, traveledDistance - firstLength);
+
+  const localProgress = Math.min(secondDistance / secondLength, 1);
+
+  return {
+    point: interpolatePoint(corner, currentTail, localProgress),
+
+    corner,
+
+    beforeCorner: false,
   };
 }
 
@@ -109,39 +357,36 @@ export function buildBodyPoints(snake, previousSnake, progress) {
 
   const points = [];
 
-  /*
-   * A trajetória começa exatamente
-   * no centro visual da cabeça.
-   */
-
   const visualHead = getVisualHead(snake, previousSnake, progress);
 
   points.push(toCenter(visualHead));
 
   /*
-   * Os pontos intermediários permanecem
-   * exatamente nas posições lógicas do grid.
-   *
-   * Isso garante que JARAKA continue sendo
-   * um Snake estritamente baseado em grid.
+   * Mantemos todos os pontos atuais
+   * do corpo exatamente como antes.
    */
 
   for (let index = 1; index < snake.length; index += 1) {
     points.push(toCenter(snake[index]));
   }
 
-  /*
-   * A extremidade da cauda também
-   * interpola entre os ticks.
-   *
-   * Isso impede alterações bruscas no
-   * comprimento visual do corpo.
-   */
-
   if (snake.length > 1) {
-    const visualTail = getVisualTail(snake, previousSnake, progress);
+    const tailState = getVisualTailState(snake, previousSnake, progress);
 
-    points.push(toCenter(visualTail));
+    /*
+     * Se a ponta ainda está na primeira
+     * metade de uma curva, o vértice
+     * precisa existir explicitamente.
+     *
+     * Isso impede o último trecho do SVG
+     * de cortar a curva diagonalmente.
+     */
+
+    if (tailState.corner && tailState.beforeCorner) {
+      points.push(toCenter(tailState.corner));
+    }
+
+    points.push(toCenter(tailState.point));
   }
 
   return removeDuplicatePoints(points);
@@ -172,16 +417,6 @@ export function simplifyOrthogonalPoints(points) {
     const sameVertical =
       Math.abs(previous.x - current.x) < EPSILON &&
       Math.abs(current.x - next.x) < EPSILON;
-
-    /*
-     * Pontos intermediários de uma reta
-     * não precisam permanecer no SVG.
-     *
-     * Mantemos apenas:
-     * - início;
-     * - mudanças de direção;
-     * - fim.
-     */
 
     if (!sameHorizontal && !sameVertical) {
       simplified.push(current);
@@ -245,6 +480,7 @@ function getCornerGeometry(previous, current, next) {
 
     corner: {
       x: current.x,
+
       y: current.y,
     },
 
@@ -282,46 +518,32 @@ export function buildRoundedPathData(points) {
 
     const outgoingHorizontal = Math.abs(current.y - next.y) < EPSILON;
 
-    /*
-     * Se não houve mudança de eixo,
-     * seguimos normalmente em linha reta.
-     */
-
     if (incomingHorizontal === outgoingHorizontal) {
-      pathData += ` L ${current.x}` + ` ${current.y}`;
+      pathData += ` L ${current.x} ` + `${current.y}`;
 
       continue;
     }
-
-    /*
-     * Houve mudança horizontal ↔ vertical.
-     *
-     * Criamos uma pequena curva quadrática,
-     * mantendo a trajetória visual suave
-     * sem transformar o movimento em
-     * deslocamento livre.
-     */
 
     const geometry = getCornerGeometry(previous, current, next);
 
     if (!geometry) {
-      pathData += ` L ${current.x}` + ` ${current.y}`;
+      pathData += ` L ${current.x} ` + `${current.y}`;
 
       continue;
     }
 
-    pathData += ` L ${geometry.entry.x}` + ` ${geometry.entry.y}`;
+    pathData += ` L ${geometry.entry.x} ` + `${geometry.entry.y}`;
 
     pathData +=
-      ` Q ${geometry.corner.x}` +
-      ` ${geometry.corner.y}` +
-      ` ${geometry.exit.x}` +
-      ` ${geometry.exit.y}`;
+      ` Q ${geometry.corner.x} ` +
+      `${geometry.corner.y}` +
+      ` ${geometry.exit.x} ` +
+      `${geometry.exit.y}`;
   }
 
   const lastPoint = points[points.length - 1];
 
-  pathData += ` L ${lastPoint.x}` + ` ${lastPoint.y}`;
+  pathData += ` L ${lastPoint.x} ` + `${lastPoint.y}`;
 
   return pathData;
 }
