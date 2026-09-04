@@ -1,10 +1,24 @@
 /* =========================================================
    JARAKA — SNAKE
-   Renderização e comportamento visual da cobra
+   Movimento contínuo sobre grid
    ========================================================= */
 
+const SVG_NAMESPACE = "http://www.w3.org/2000/svg";
+
+const GRID_SIZE = 24;
+
+const CORNER_RADIUS = 0.18;
+
 export function createSnakeRenderer({ layer }) {
-  const elements = [];
+  let bodySvg = null;
+
+  let bodyPath = null;
+
+  let headElement = null;
+
+  let headCore = null;
+
+  let latestSnakeLength = 0;
 
   /* =======================================================
      DIREÇÃO
@@ -24,6 +38,32 @@ export function createSnakeRenderer({ layer }) {
     }
 
     return "down";
+  }
+
+  /* =======================================================
+     UTILITÁRIOS
+     ======================================================= */
+
+  function lerp(start, end, progress) {
+    return start + (end - start) * progress;
+  }
+
+  function isSamePoint(first, second) {
+    return (
+      Math.abs(first.x - second.x) < 0.0001 &&
+      Math.abs(first.y - second.y) < 0.0001
+    );
+  }
+
+  function toCenter(position) {
+    return {
+      x: position.x + 0.5,
+      y: position.y + 0.5,
+    };
+  }
+
+  function getDistance(first, second) {
+    return Math.hypot(second.x - first.x, second.y - first.y);
   }
 
   /* =======================================================
@@ -53,160 +93,455 @@ export function createSnakeRenderer({ layer }) {
   }
 
   /* =======================================================
-     SEGMENTOS
+     CORPO SVG
      ======================================================= */
 
-  function createSegment(isHead = false) {
+  function createBodySvg() {
+    const svg = document.createElementNS(SVG_NAMESPACE, "svg");
+
+    svg.classList.add("snake-body-svg");
+
+    svg.setAttribute("viewBox", `0 0 ${GRID_SIZE} ${GRID_SIZE}`);
+
+    svg.setAttribute("preserveAspectRatio", "none");
+
+    svg.setAttribute("aria-hidden", "true");
+
+    const path = document.createElementNS(SVG_NAMESPACE, "path");
+
+    path.classList.add("snake-body-path");
+
+    svg.appendChild(path);
+
+    layer.appendChild(svg);
+
+    bodySvg = svg;
+
+    bodyPath = path;
+  }
+
+  /* =======================================================
+     CABEÇA
+     ======================================================= */
+
+  function createHead() {
     const element = document.createElement("div");
 
-    element.className = isHead
-      ? "snake-part snake-head"
-      : "snake-part snake-segment";
+    element.className = "snake-part snake-head";
 
     const core = document.createElement("div");
 
     core.className = "snake-core";
 
-    if (isHead) {
-      core.appendChild(createFace());
-    }
+    core.appendChild(createFace());
 
     element.appendChild(core);
 
     layer.appendChild(element);
 
-    const entry = {
-      element,
-      core,
-    };
+    headElement = element;
 
-    elements.push(entry);
-
-    return entry;
+    headCore = core;
   }
 
+  /* =======================================================
+     CRIAÇÃO
+     ======================================================= */
+
   function create(snake, direction) {
-    snake.forEach((segment, index) => {
-      createSegment(index === 0);
-    });
+    layer.replaceChildren();
+
+    createBodySvg();
+
+    createHead();
+
+    latestSnakeLength = snake.length;
 
     updateSegmentShapes(snake, direction);
 
     updateHeadDirection(direction);
   }
 
-  function syncSegments(snake) {
-    while (elements.length < snake.length) {
-      createSegment(false);
-    }
+  /* =======================================================
+     POSIÇÃO VISUAL DA CABEÇA
+     ======================================================= */
+
+  function getVisualHead(snake, previousSnake, progress) {
+    const currentHead = snake[0];
+
+    const previousHead = previousSnake[0] ?? currentHead;
+
+    return {
+      x: lerp(previousHead.x, currentHead.x, progress),
+      y: lerp(previousHead.y, currentHead.y, progress),
+    };
   }
 
   /* =======================================================
-     FORMATO DOS SEGMENTOS
+     POSIÇÃO VISUAL DA CAUDA
      ======================================================= */
 
-  function getSegmentShape(snake, direction, index) {
-    if (index === 0) {
-      return direction.x !== 0 ? "horizontal" : "vertical";
-    }
+  function getVisualTail(snake, previousSnake, progress) {
+    const currentTail = snake[snake.length - 1];
 
-    const current = snake[index];
+    const previousTail =
+      previousSnake[previousSnake.length - 1] ?? currentTail;
 
-    const previous = snake[index - 1];
-
-    if (index === snake.length - 1) {
-      return previous.x !== current.x ? "horizontal" : "vertical";
-    }
-
-    const next = snake[index + 1];
-
-    const previousHorizontal = previous.x !== current.x;
-
-    const nextHorizontal = next.x !== current.x;
-
-    if (previousHorizontal !== nextHorizontal) {
-      return "corner";
-    }
-
-    return previousHorizontal ? "horizontal" : "vertical";
+    return {
+      x: lerp(previousTail.x, currentTail.x, progress),
+      y: lerp(previousTail.y, currentTail.y, progress),
+    };
   }
 
-  function updateSegmentShapes(snake, direction) {
-    syncSegments(snake);
+  /* =======================================================
+     PONTOS DO CORPO
+     ======================================================= */
 
-    snake.forEach((segment, index) => {
-      const snakeElement = elements[index];
+  function removeDuplicatePoints(points) {
+    const result = [];
 
-      if (!snakeElement) {
-        return;
+    points.forEach((point) => {
+      const lastPoint = result[result.length - 1];
+
+      if (!lastPoint || !isSamePoint(lastPoint, point)) {
+        result.push(point);
       }
+    });
 
-      const { core } = snakeElement;
+    return result;
+  }
 
-      core.classList.remove(
-        "is-horizontal",
-        "is-vertical",
-        "is-corner",
-        "corner-up-right",
-        "corner-right-down",
-        "corner-down-left",
-        "corner-left-up",
+  function buildBodyPoints(snake, previousSnake, progress) {
+    if (snake.length === 0) {
+      return [];
+    }
+
+    const points = [];
+
+    /*
+     * A trajetória começa exatamente no centro
+     * visual da cabeça.
+     */
+
+    const visualHead = getVisualHead(
+      snake,
+      previousSnake,
+      progress,
+    );
+
+    points.push(toCenter(visualHead));
+
+    /*
+     * Os segmentos intermediários continuam
+     * exatamente nas posições lógicas do grid.
+     */
+
+    for (let index = 1; index < snake.length; index += 1) {
+      points.push(toCenter(snake[index]));
+    }
+
+    /*
+     * A extremidade da cauda também é interpolada.
+     *
+     * Isso mantém o comprimento visual contínuo
+     * durante todo o intervalo entre dois ticks.
+     */
+
+    if (snake.length > 1) {
+      const visualTail = getVisualTail(
+        snake,
+        previousSnake,
+        progress,
       );
 
-      const shape = getSegmentShape(snake, direction, index);
+      points.push(toCenter(visualTail));
+    }
 
-      core.classList.add(`is-${shape}`);
-    });
+    return removeDuplicatePoints(points);
   }
 
   /* =======================================================
-     INTERPOLAÇÃO
+     SIMPLIFICAÇÃO DA TRAJETÓRIA
      ======================================================= */
 
-  function lerp(start, end, progress) {
-    return start + (end - start) * progress;
+  function simplifyOrthogonalPoints(points) {
+    if (points.length <= 2) {
+      return points;
+    }
+
+    const simplified = [points[0]];
+
+    for (
+      let index = 1;
+      index < points.length - 1;
+      index += 1
+    ) {
+      const previous =
+        simplified[simplified.length - 1];
+
+      const current = points[index];
+
+      const next = points[index + 1];
+
+      const sameHorizontal =
+        Math.abs(previous.y - current.y) < 0.0001 &&
+        Math.abs(current.y - next.y) < 0.0001;
+
+      const sameVertical =
+        Math.abs(previous.x - current.x) < 0.0001 &&
+        Math.abs(current.x - next.x) < 0.0001;
+
+      /*
+       * Pontos intermediários de uma reta não
+       * precisam existir no path.
+       *
+       * Mantemos somente mudanças reais de direção.
+       */
+
+      if (!sameHorizontal && !sameVertical) {
+        simplified.push(current);
+      }
+    }
+
+    simplified.push(points[points.length - 1]);
+
+    return simplified;
+  }
+
+  /* =======================================================
+     GEOMETRIA DAS CURVAS
+     ======================================================= */
+
+  function getCornerGeometry(previous, current, next) {
+    const incomingLength = getDistance(
+      previous,
+      current,
+    );
+
+    const outgoingLength = getDistance(
+      current,
+      next,
+    );
+
+    const radius = Math.min(
+      CORNER_RADIUS,
+      incomingLength * 0.32,
+      outgoingLength * 0.32,
+    );
+
+    const incomingX = current.x - previous.x;
+
+    const incomingY = current.y - previous.y;
+
+    const outgoingX = next.x - current.x;
+
+    const outgoingY = next.y - current.y;
+
+    const incomingMagnitude = Math.hypot(
+      incomingX,
+      incomingY,
+    );
+
+    const outgoingMagnitude = Math.hypot(
+      outgoingX,
+      outgoingY,
+    );
+
+    if (
+      incomingMagnitude === 0 ||
+      outgoingMagnitude === 0
+    ) {
+      return null;
+    }
+
+    const incomingUnit = {
+      x: incomingX / incomingMagnitude,
+      y: incomingY / incomingMagnitude,
+    };
+
+    const outgoingUnit = {
+      x: outgoingX / outgoingMagnitude,
+      y: outgoingY / outgoingMagnitude,
+    };
+
+    return {
+      entry: {
+        x: current.x - incomingUnit.x * radius,
+        y: current.y - incomingUnit.y * radius,
+      },
+
+      corner: current,
+
+      exit: {
+        x: current.x + outgoingUnit.x * radius,
+        y: current.y + outgoingUnit.y * radius,
+      },
+    };
+  }
+
+  /* =======================================================
+     CONSTRUÇÃO DO PATH
+     ======================================================= */
+
+  function buildRoundedPathData(points) {
+    if (points.length === 0) {
+      return "";
+    }
+
+    if (points.length === 1) {
+      return `M ${points[0].x} ${points[0].y}`;
+    }
+
+    let data = `M ${points[0].x} ${points[0].y}`;
+
+    for (
+      let index = 1;
+      index < points.length - 1;
+      index += 1
+    ) {
+      const previous = points[index - 1];
+
+      const current = points[index];
+
+      const next = points[index + 1];
+
+      const incomingHorizontal =
+        Math.abs(previous.y - current.y) < 0.0001;
+
+      const outgoingHorizontal =
+        Math.abs(current.y - next.y) < 0.0001;
+
+      /*
+       * Se a direção não mudou,
+       * seguimos em linha reta.
+       */
+
+      if (
+        incomingHorizontal === outgoingHorizontal
+      ) {
+        data += ` L ${current.x} ${current.y}`;
+
+        continue;
+      }
+
+      /*
+       * Mudança real de eixo:
+       * arredondamos discretamente a curva.
+       */
+
+      const geometry = getCornerGeometry(
+        previous,
+        current,
+        next,
+      );
+
+      if (!geometry) {
+        data += ` L ${current.x} ${current.y}`;
+
+        continue;
+      }
+
+      data +=
+        ` L ${geometry.entry.x}` +
+        ` ${geometry.entry.y}`;
+
+      data +=
+        ` Q ${geometry.corner.x}` +
+        ` ${geometry.corner.y}` +
+        ` ${geometry.exit.x}` +
+        ` ${geometry.exit.y}`;
+    }
+
+    const lastPoint = points[points.length - 1];
+
+    data += ` L ${lastPoint.x} ${lastPoint.y}`;
+
+    return data;
+  }
+
+  /* =======================================================
+     FORMATO DA CABEÇA
+     ======================================================= */
+
+  function updateSegmentShapes(snake, direction) {
+    latestSnakeLength = snake.length;
+
+    if (!headCore) {
+      return;
+    }
+
+    headCore.classList.remove(
+      "is-horizontal",
+      "is-vertical",
+      "is-corner",
+      "corner-up-right",
+      "corner-right-down",
+      "corner-down-left",
+      "corner-left-up",
+    );
+
+    headCore.classList.add(
+      direction.x !== 0
+        ? "is-horizontal"
+        : "is-vertical",
+    );
   }
 
   /* =======================================================
      RENDERIZAÇÃO
      ======================================================= */
 
-  function render(snake, previousSnake, progress) {
-    syncSegments(snake);
+  function render(
+    snake,
+    previousSnake,
+    progress,
+  ) {
+    if (!headElement || !bodyPath) {
+      return;
+    }
 
-    snake.forEach((segment, index) => {
-      const previous = previousSnake[index] ?? segment;
+    latestSnakeLength = snake.length;
 
-      const snakeElement = elements[index];
+    /*
+     * Cabeça:
+     * continua interpolando suavemente entre
+     * a posição anterior e a posição atual.
+     */
 
-      if (!previous || !snakeElement) {
-        return;
-      }
+    const visualHead = getVisualHead(
+      snake,
+      previousSnake,
+      progress,
+    );
 
-      const visualX = lerp(previous.x, segment.x, progress);
+    headElement.style.setProperty(
+      "--visual-x",
+      visualHead.x,
+    );
 
-      const visualY = lerp(previous.y, segment.y, progress);
+    headElement.style.setProperty(
+      "--visual-y",
+      visualHead.y,
+    );
 
-      /*
-       * Garantia importante:
-       *
-       * Nenhuma escala ou deformação
-       * é aplicada ao .snake-part.
-       *
-       * O elemento externo cuida
-       * SOMENTE da posição.
-       */
+    /*
+     * Corpo:
+     * agora é uma única trajetória contínua.
+     */
 
-      snakeElement.element.style.removeProperty("scale");
+    const rawPoints = buildBodyPoints(
+      snake,
+      previousSnake,
+      progress,
+    );
 
-      snakeElement.element.style.removeProperty("transform-origin");
+    const points =
+      simplifyOrthogonalPoints(rawPoints);
 
-      delete snakeElement.element.dataset.motionScale;
+    const pathData =
+      buildRoundedPathData(points);
 
-      snakeElement.element.style.setProperty("--visual-x", visualX);
-
-      snakeElement.element.style.setProperty("--visual-y", visualY);
-    });
+    bodyPath.setAttribute("d", pathData);
   }
 
   /* =======================================================
@@ -214,13 +549,12 @@ export function createSnakeRenderer({ layer }) {
      ======================================================= */
 
   function updateHeadDirection(direction) {
-    const head = elements[0]?.element;
-
-    if (!head) {
+    if (!headElement) {
       return;
     }
 
-    head.dataset.direction = getDirectionName(direction);
+    headElement.dataset.direction =
+      getDirectionName(direction);
   }
 
   /* =======================================================
@@ -228,15 +562,11 @@ export function createSnakeRenderer({ layer }) {
      ======================================================= */
 
   function triggerHeadTurn(turnSide) {
-    const head = elements[0]?.element;
-
-    const headCore = elements[0]?.core;
-
-    if (!head || !headCore) {
+    if (!headElement || !headCore) {
       return;
     }
 
-    head.dataset.turn = turnSide;
+    headElement.dataset.turn = turnSide;
 
     headCore.classList.remove("is-turning");
 
@@ -245,9 +575,13 @@ export function createSnakeRenderer({ layer }) {
     headCore.classList.add("is-turning");
 
     window.setTimeout(() => {
+      if (!headCore || !headElement) {
+        return;
+      }
+
       headCore.classList.remove("is-turning");
 
-      delete head.dataset.turn;
+      delete headElement.dataset.turn;
     }, 130);
   }
 
@@ -256,13 +590,15 @@ export function createSnakeRenderer({ layer }) {
      ======================================================= */
 
   function clearEatingFaceStates() {
-    const head = elements[0]?.element;
-
-    if (!head) {
+    if (!headElement) {
       return;
     }
 
-    head.classList.remove("is-biting", "is-bite-closing", "is-chewing");
+    headElement.classList.remove(
+      "is-biting",
+      "is-bite-closing",
+      "is-chewing",
+    );
   }
 
   /* =======================================================
@@ -270,27 +606,25 @@ export function createSnakeRenderer({ layer }) {
      ======================================================= */
 
   function triggerBite() {
-    const head = elements[0]?.element;
-
-    if (!head) {
+    if (!headElement) {
       return;
     }
 
     clearEatingFaceStates();
 
-    void head.offsetWidth;
+    void headElement.offsetWidth;
 
-    head.classList.add("is-biting");
+    headElement.classList.add("is-biting");
   }
 
   function triggerBiteClose() {
-    const head = elements[0]?.element;
-
-    if (!head) {
+    if (!headElement) {
       return;
     }
 
-    head.classList.add("is-bite-closing");
+    headElement.classList.add(
+      "is-bite-closing",
+    );
   }
 
   /* =======================================================
@@ -298,27 +632,27 @@ export function createSnakeRenderer({ layer }) {
      ======================================================= */
 
   function triggerChew() {
-    const head = elements[0]?.element;
-
-    if (!head) {
+    if (!headElement) {
       return;
     }
 
-    head.classList.remove("is-biting", "is-bite-closing", "is-chewing");
+    headElement.classList.remove(
+      "is-biting",
+      "is-bite-closing",
+      "is-chewing",
+    );
 
-    void head.offsetWidth;
+    void headElement.offsetWidth;
 
-    head.classList.add("is-chewing");
+    headElement.classList.add("is-chewing");
   }
 
   function finishChew() {
-    const head = elements[0]?.element;
-
-    if (!head) {
+    if (!headElement) {
       return;
     }
 
-    head.classList.remove("is-chewing");
+    headElement.classList.remove("is-chewing");
   }
 
   function finishBite() {
@@ -326,24 +660,105 @@ export function createSnakeRenderer({ layer }) {
   }
 
   /* =======================================================
+     POSIÇÃO SOBRE O CORPO
+     ======================================================= */
+
+  function getBodyPointAtRatio(ratio) {
+    if (!bodyPath) {
+      return null;
+    }
+
+    let totalLength = 0;
+
+    try {
+      totalLength = bodyPath.getTotalLength();
+    } catch {
+      return null;
+    }
+
+    if (
+      !Number.isFinite(totalLength) ||
+      totalLength <= 0
+    ) {
+      return null;
+    }
+
+    const safeRatio = Math.max(
+      0,
+      Math.min(ratio, 1),
+    );
+
+    const point = bodyPath.getPointAtLength(
+      totalLength * safeRatio,
+    );
+
+    return {
+      x: point.x,
+      y: point.y,
+    };
+  }
+
+  /* =======================================================
+     DEGLUTIÇÃO — ELEMENTO
+     ======================================================= */
+
+  function createSwallowBulge() {
+    if (!bodySvg) {
+      return null;
+    }
+
+    const bulge = document.createElementNS(
+      SVG_NAMESPACE,
+      "circle",
+    );
+
+    bulge.classList.add(
+      "snake-swallow-bulge",
+    );
+
+    bulge.setAttribute("r", "0.55");
+
+    bodySvg.appendChild(bulge);
+
+    return bulge;
+  }
+
+  /* =======================================================
      DEGLUTIÇÃO — SEGMENTO
      ======================================================= */
 
   function triggerSwallowSegment(index) {
-    const core = elements[index]?.core;
+    const bodyCount = Math.max(
+      1,
+      latestSnakeLength - 1,
+    );
 
-    if (!core) {
+    const ratio = Math.max(
+      0,
+      Math.min(index / bodyCount, 1),
+    );
+
+    const point =
+      getBodyPointAtRatio(ratio);
+
+    if (!point) {
       return;
     }
 
-    core.classList.remove("is-swallowing");
+    const bulge = createSwallowBulge();
 
-    void core.offsetWidth;
+    if (!bulge) {
+      return;
+    }
 
-    core.classList.add("is-swallowing");
+    bulge.setAttribute("cx", point.x);
+
+    bulge.setAttribute("cy", point.y);
+
+    bulge.classList.add("is-pulsing");
 
     window.setTimeout(() => {
-      core.classList.remove("is-swallowing");
+      bulge.remove();
     }, 260);
   }
 
@@ -351,27 +766,64 @@ export function createSnakeRenderer({ layer }) {
      DEGLUTIÇÃO — ONDA
      ======================================================= */
 
-  function triggerSwallowWave({ segmentDelay = 92, onComplete } = {}) {
-    const bodyElements = elements.slice(1);
+  function triggerSwallowWave({
+    segmentDelay = 92,
+    onComplete,
+  } = {}) {
+    const bodyCount = Math.max(
+      1,
+      latestSnakeLength - 1,
+    );
 
-    if (bodyElements.length === 0) {
+    const duration = Math.max(
+      420,
+      bodyCount * segmentDelay + 245,
+    );
+
+    const bulge = createSwallowBulge();
+
+    if (!bulge) {
       onComplete?.();
+
       return;
     }
 
-    bodyElements.forEach((entry, bodyIndex) => {
-      window.setTimeout(() => {
-        triggerSwallowSegment(bodyIndex + 1);
+    const startedAt = performance.now();
 
-        const isLast = bodyIndex === bodyElements.length - 1;
+    function animate(timestamp) {
+      if (!bulge.isConnected) {
+        return;
+      }
 
-        if (isLast) {
-          window.setTimeout(() => {
-            onComplete?.();
-          }, 245);
-        }
-      }, bodyIndex * segmentDelay);
-    });
+      const progress = Math.min(
+        (timestamp - startedAt) / duration,
+        1,
+      );
+
+      const ratio =
+        0.04 + progress * 0.96;
+
+      const point =
+        getBodyPointAtRatio(ratio);
+
+      if (point) {
+        bulge.setAttribute("cx", point.x);
+
+        bulge.setAttribute("cy", point.y);
+      }
+
+      if (progress < 1) {
+        requestAnimationFrame(animate);
+
+        return;
+      }
+
+      bulge.remove();
+
+      onComplete?.();
+    }
+
+    requestAnimationFrame(animate);
   }
 
   /* =======================================================
@@ -379,22 +831,35 @@ export function createSnakeRenderer({ layer }) {
      ======================================================= */
 
   function triggerGrowthArrival() {
-    const lastElement = elements[elements.length - 1];
-
-    if (!lastElement) {
+    if (!bodySvg) {
       return;
     }
 
-    const { core } = lastElement;
+    const point = getBodyPointAtRatio(1);
 
-    core.classList.remove("is-growth-arrival");
+    if (!point) {
+      return;
+    }
 
-    void core.offsetWidth;
+    const arrival = document.createElementNS(
+      SVG_NAMESPACE,
+      "circle",
+    );
 
-    core.classList.add("is-growth-arrival");
+    arrival.classList.add(
+      "snake-growth-arrival",
+    );
+
+    arrival.setAttribute("cx", point.x);
+
+    arrival.setAttribute("cy", point.y);
+
+    arrival.setAttribute("r", "0.45");
+
+    bodySvg.appendChild(arrival);
 
     window.setTimeout(() => {
-      core.classList.remove("is-growth-arrival");
+      arrival.remove();
     }, 300);
   }
 
@@ -402,7 +867,10 @@ export function createSnakeRenderer({ layer }) {
      SEQUÊNCIA DE ALIMENTAÇÃO
      ======================================================= */
 
-  function triggerEatingSequence({ onMouseEnter, onSwallowComplete } = {}) {
+  function triggerEatingSequence({
+    onMouseEnter,
+    onSwallowComplete,
+  } = {}) {
     /*
      * 0 ms
      * Abre a boca.
@@ -430,8 +898,7 @@ export function createSnakeRenderer({ layer }) {
 
     /*
      * 360 ms
-     * O alimento começa a percorrer
-     * imediatamente o corpo.
+     * O volume começa a percorrer o path.
      */
 
     window.setTimeout(() => {
@@ -455,7 +922,7 @@ export function createSnakeRenderer({ layer }) {
 
     /*
      * 1340 ms
-     * Volta à expressão normal.
+     * Expressão normal.
      */
 
     window.setTimeout(() => {
