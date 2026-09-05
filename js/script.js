@@ -10,6 +10,8 @@ import { createDirectionController } from "./game/direction.js";
 
 import { createFoodController } from "./game/food.js";
 
+import { createGameOverController } from "./game/game-over.js";
+
 import { createGrowthController } from "./game/growth.js";
 
 import { createGameLoop } from "./game/loop.js";
@@ -52,7 +54,7 @@ const gameState = createGameState({
 });
 
 /* =========================================================
-   CONTROLLERS
+   CONTROLLERS PRINCIPAIS
    ========================================================= */
 
 const snakeRenderer = createSnakeRenderer({
@@ -91,26 +93,36 @@ const foodController = createFoodController({
 });
 
 /* =========================================================
+   REFERÊNCIAS TARDIAS
+   ========================================================= */
+
+/*
+ * Input e loop são criados mais abaixo,
+ * mas o controller de game over precisa
+ * conseguir interromper ambos.
+ *
+ * Mantemos referências mutáveis apenas
+ * para resolver essa dependência de ciclo
+ * de vida sem acoplar os módulos.
+ */
+
+let inputController = null;
+
+let gameLoop = null;
+
+/* =========================================================
    GAME OVER
    ========================================================= */
 
-function endGame(reason) {
-  const didEnd = gameState.endGame(reason);
+const gameOverController = createGameOverController({
+  gameBoard,
 
-  if (!didEnd) {
-    return;
-  }
+  gameState,
 
-  inputController.stop();
+  getInputController: () => inputController,
 
-  gameLoop.stop();
-
-  gameBoard?.setAttribute("data-game-state", "game-over");
-
-  gameBoard?.setAttribute("data-game-over-reason", reason);
-
-  console.info(`JARAKA — Game Over: ${gameState.getGameOverReason()}`);
-}
+  getGameLoop: () => gameLoop,
+});
 
 /* =========================================================
    ALIMENTAÇÃO
@@ -163,7 +175,7 @@ function moveSnake() {
 
   const direction = directionController.applyQueuedDirection();
 
-  inputController.unlock();
+  inputController?.unlock();
 
   const head = snake[0];
 
@@ -181,7 +193,7 @@ function moveSnake() {
      ------------------------------------------------------- */
 
   if (willHitWall(newHead)) {
-    endGame("wall");
+    gameOverController.end("wall");
 
     return;
   }
@@ -201,7 +213,7 @@ function moveSnake() {
       willGrow: willEatMouse,
     })
   ) {
-    endGame("self");
+    gameOverController.end("self");
 
     return;
   }
@@ -301,11 +313,11 @@ function handleDirectionChange(candidate) {
   const accepted = queueDirection(candidate);
 
   if (!accepted && !gameState.isGameOver()) {
-    inputController.unlock();
+    inputController?.unlock();
   }
 }
 
-const inputController = createInputController({
+inputController = createInputController({
   getDirection: () => directionController.getDirection(),
 
   onDirectionChange: handleDirectionChange,
@@ -315,7 +327,7 @@ const inputController = createInputController({
    LOOP
    ========================================================= */
 
-const gameLoop = createGameLoop({
+gameLoop = createGameLoop({
   onMove: moveSnake,
 
   onRender: renderGame,
