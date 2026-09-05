@@ -15,6 +15,8 @@
    - ./snake/eating.js
    ========================================================= */
 
+import { GRID_SIZE } from "./game/config.js";
+
 import {
   getVisualHead,
   buildBodyPoints,
@@ -42,8 +44,6 @@ import {
 } from "./snake/eating.js";
 
 const SVG_NAMESPACE = "http://www.w3.org/2000/svg";
-
-const GRID_SIZE = 16;
 
 /* =========================================================
    CAUDA
