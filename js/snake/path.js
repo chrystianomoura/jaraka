@@ -15,9 +15,9 @@
    Este módulo não manipula DOM.
    ========================================================= */
 
-const CORNER_RADIUS = 0.18;
+import { EPSILON } from "../game/config.js";
 
-const EPSILON = 0.0001;
+const CORNER_RADIUS = 0.18;
 
 /* =========================================================
    INTERPOLAÇÃO
