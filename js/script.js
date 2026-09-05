@@ -16,6 +16,8 @@ import { createGameLoop } from "./game/loop.js";
 
 import { getNextHeadPosition, moveSnakeSegments } from "./game/movement.js";
 
+import { createGameState } from "./game/state.js";
+
 /* =========================================================
    DOM
    ========================================================= */
@@ -29,10 +31,10 @@ const mouseFood = document.querySelector(".mouse-food");
 const mouseActor = mouseFood?.querySelector(".mouse-actor");
 
 /* =========================================================
-   COBRA — ESTADO LÓGICO
+   CONFIGURAÇÃO INICIAL DA PARTIDA
    ========================================================= */
 
-let snake = [
+const initialSnake = [
   { x: 9, y: 8 },
   { x: 8, y: 8 },
   { x: 7, y: 8 },
@@ -42,26 +44,12 @@ let snake = [
 ];
 
 /* =========================================================
-   COBRA — ESTADO VISUAL
+   ESTADO
    ========================================================= */
 
-function cloneSnake(source) {
-  return source.map((segment) => ({
-    ...segment,
-  }));
-}
-
-let renderSnake = cloneSnake(snake);
-
-let previousRenderSnake = cloneSnake(renderSnake);
-
-/* =========================================================
-   ESTADO DA PARTIDA
-   ========================================================= */
-
-let isGameOver = false;
-
-let gameOverReason = null;
+const gameState = createGameState({
+  initialSnake,
+});
 
 /* =========================================================
    CONTROLLERS
@@ -95,9 +83,9 @@ const foodController = createFoodController({
 
   mouseController,
 
-  getSnake: () => snake,
+  getSnake: () => gameState.getSnake(),
 
-  isGameOver: () => isGameOver,
+  isGameOver: () => gameState.isGameOver(),
 
   initialPosition: mousePosition,
 });
@@ -107,13 +95,11 @@ const foodController = createFoodController({
    ========================================================= */
 
 function endGame(reason) {
-  if (isGameOver) {
+  const didEnd = gameState.endGame(reason);
+
+  if (!didEnd) {
     return;
   }
-
-  isGameOver = true;
-
-  gameOverReason = reason;
 
   inputController.stop();
 
@@ -123,7 +109,7 @@ function endGame(reason) {
 
   gameBoard?.setAttribute("data-game-over-reason", reason);
 
-  console.info(`JARAKA — Game Over: ${gameOverReason}`);
+  console.info(`JARAKA — Game Over: ${gameState.getGameOverReason()}`);
 }
 
 /* =========================================================
@@ -131,7 +117,7 @@ function endGame(reason) {
    ========================================================= */
 
 function startEatingSequence() {
-  if (isGameOver) {
+  if (gameState.isGameOver()) {
     return;
   }
 
@@ -145,7 +131,7 @@ function startEatingSequence() {
 
   snakeRenderer.triggerEatingSequence({
     onMouseEnter: () => {
-      if (isGameOver) {
+      if (gameState.isGameOver()) {
         return;
       }
 
@@ -153,7 +139,7 @@ function startEatingSequence() {
     },
 
     onSwallowComplete: () => {
-      if (isGameOver) {
+      if (gameState.isGameOver()) {
         return;
       }
 
@@ -169,9 +155,11 @@ function startEatingSequence() {
    ========================================================= */
 
 function moveSnake() {
-  if (isGameOver) {
+  if (gameState.isGameOver()) {
     return;
   }
+
+  const snake = gameState.getSnake();
 
   const direction = directionController.applyQueuedDirection();
 
@@ -230,7 +218,7 @@ function moveSnake() {
      SNAPSHOT VISUAL
      ------------------------------------------------------- */
 
-  previousRenderSnake = cloneSnake(renderSnake);
+  gameState.snapshotRenderSnake();
 
   /* -------------------------------------------------------
      MOVIMENTO DOS SEGMENTOS
@@ -248,7 +236,9 @@ function moveSnake() {
      CRESCIMENTO VISUAL
      ------------------------------------------------------- */
 
-  renderSnake = growthController.updateVisualGrowth(snake, didGrow);
+  const renderSnake = growthController.updateVisualGrowth(snake, didGrow);
+
+  gameState.setRenderSnake(renderSnake);
 
   /* -------------------------------------------------------
      RENDERER
@@ -274,7 +264,11 @@ function moveSnake() {
    ========================================================= */
 
 function renderGame(progress) {
-  snakeRenderer.render(renderSnake, previousRenderSnake, progress);
+  snakeRenderer.render(
+    gameState.getRenderSnake(),
+    gameState.getPreviousRenderSnake(),
+    progress,
+  );
 }
 
 /* =========================================================
@@ -282,7 +276,7 @@ function renderGame(progress) {
    ========================================================= */
 
 function queueDirection(candidate) {
-  if (isGameOver) {
+  if (gameState.isGameOver()) {
     return false;
   }
 
@@ -306,7 +300,7 @@ function queueDirection(candidate) {
 function handleDirectionChange(candidate) {
   const accepted = queueDirection(candidate);
 
-  if (!accepted && !isGameOver) {
+  if (!accepted && !gameState.isGameOver()) {
     inputController.unlock();
   }
 }
@@ -326,7 +320,7 @@ const gameLoop = createGameLoop({
 
   onRender: renderGame,
 
-  isGameOver: () => isGameOver,
+  isGameOver: () => gameState.isGameOver(),
 });
 
 /* =========================================================
@@ -337,11 +331,15 @@ foodController.updatePosition();
 
 const initialDirection = directionController.getDirection();
 
-snakeRenderer.create(snake, initialDirection);
+snakeRenderer.create(gameState.getSnake(), initialDirection);
 
-mouseController.update(snake[0]);
+mouseController.update(gameState.getSnake()[0]);
 
-snakeRenderer.render(renderSnake, previousRenderSnake, 0);
+snakeRenderer.render(
+  gameState.getRenderSnake(),
+  gameState.getPreviousRenderSnake(),
+  0,
+);
 
 inputController.start();
 
