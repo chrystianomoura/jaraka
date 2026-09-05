@@ -4,15 +4,15 @@ import { createInputController } from "./input.js";
 import { createMouseController } from "./mouse.js";
 import { createSnakeRenderer } from "./snake.js";
 
-import { MOVE_INTERVAL } from "./game/config.js";
-
 import { isSamePosition, willHitSelf, willHitWall } from "./game/collision.js";
 
 import { createDirectionController } from "./game/direction.js";
 
+import { createFoodController } from "./game/food.js";
+
 import { createGrowthController } from "./game/growth.js";
 
-import { createFoodController } from "./game/food.js";
+import { createGameLoop } from "./game/loop.js";
 
 import { getNextHeadPosition, moveSnakeSegments } from "./game/movement.js";
 
@@ -56,10 +56,8 @@ let renderSnake = cloneSnake(snake);
 let previousRenderSnake = cloneSnake(renderSnake);
 
 /* =========================================================
-   LOOP
+   ESTADO DA PARTIDA
    ========================================================= */
-
-let lastMoveTime = performance.now();
 
 let isGameOver = false;
 
@@ -118,6 +116,8 @@ function endGame(reason) {
   gameOverReason = reason;
 
   inputController.stop();
+
+  gameLoop.stop();
 
   gameBoard?.setAttribute("data-game-state", "game-over");
 
@@ -270,29 +270,11 @@ function moveSnake() {
 }
 
 /* =========================================================
-   GAME LOOP
+   RENDERIZAÇÃO
    ========================================================= */
 
-function gameLoop(timestamp) {
-  if (isGameOver) {
-    return;
-  }
-
-  while (timestamp - lastMoveTime >= MOVE_INTERVAL) {
-    moveSnake();
-
-    if (isGameOver) {
-      return;
-    }
-
-    lastMoveTime += MOVE_INTERVAL;
-  }
-
-  const progress = Math.min((timestamp - lastMoveTime) / MOVE_INTERVAL, 1);
-
+function renderGame(progress) {
   snakeRenderer.render(renderSnake, previousRenderSnake, progress);
-
-  requestAnimationFrame(gameLoop);
 }
 
 /* =========================================================
@@ -336,6 +318,18 @@ const inputController = createInputController({
 });
 
 /* =========================================================
+   LOOP
+   ========================================================= */
+
+const gameLoop = createGameLoop({
+  onMove: moveSnake,
+
+  onRender: renderGame,
+
+  isGameOver: () => isGameOver,
+});
+
+/* =========================================================
    INICIALIZAÇÃO
    ========================================================= */
 
@@ -351,4 +345,4 @@ snakeRenderer.render(renderSnake, previousRenderSnake, 0);
 
 inputController.start();
 
-requestAnimationFrame(gameLoop);
+gameLoop.start();
