@@ -6,7 +6,7 @@
    - criação do SVG do corpo;
    - coordenação da renderização;
    - integração entre path, cabeça e alimentação;
-   - cauda visual proporcional;
+   - desenvolvimento progressivo da cauda;
    - manutenção da API pública do renderer.
 
    Módulos:
@@ -46,20 +46,112 @@ import {
 const SVG_NAMESPACE = "http://www.w3.org/2000/svg";
 
 /* =========================================================
-   CAUDA
+   CAUDA — RENDERER
    ========================================================= */
 
-const TAIL_LENGTH_RATIO = 0.38;
+/*
+ * A base usava:
+ *
+ * 32 segmentos para até 5.2 grids.
+ *
+ * Nesta versão podemos chegar a 40 segmentos, mas os
+ * pontos compartilhados são reutilizados.
+ *
+ * Máximo:
+ *
+ * 41 fronteiras
+ * 40 centros
+ * =
+ * 81 getPointAtLength()
+ *
+ * A base:
+ *
+ * 32 × 3 = 96
+ */
 
-const MIN_TAIL_LENGTH = 1.8;
+const MAX_TAIL_SEGMENT_COUNT = 40;
 
-const MAX_TAIL_LENGTH = 5.2;
+const MIN_TAIL_SEGMENT_COUNT = 8;
 
-const TAIL_SEGMENT_COUNT = 32;
+const TARGET_TAIL_SEGMENT_LENGTH = 0.175;
 
 const BODY_WIDTH = 0.92;
 
-const TAIL_END_WIDTH = 0.28;
+/* =========================================================
+   DESENVOLVIMENTO MORFOLÓGICO
+   ========================================================= */
+
+/*
+ * Número de crescimentos necessários para a morfologia
+ * atingir aproximadamente o estado adulto.
+ */
+
+const MORPHOLOGY_GROWTH_TARGET = 7;
+
+/*
+ * No início praticamente não existe diferença entre
+ * corpo e cauda.
+ *
+ * No estado adulto a ponta possui definição clara,
+ * mas não chega ao aspecto de agulha.
+ */
+
+const YOUNG_END_WIDTH = BODY_WIDTH;
+
+const ADULT_END_WIDTH = 0.34;
+
+/*
+ * Jovem:
+ *
+ * expoente alto -> a largura praticamente só muda
+ * perto da extremidade.
+ *
+ * Adulta:
+ *
+ * expoente abaixo de 1 -> a perda de largura começa
+ * muito antes.
+ */
+
+const YOUNG_TAPER_EXPONENT = 3.2;
+
+const ADULT_TAPER_EXPONENT = 0.72;
+
+/* =========================================================
+   EXTENSÃO DA REGIÃO DA CAUDA
+   ========================================================= */
+
+/*
+ * A cauda deixa de ser uma "peça final".
+ *
+ * Conforme a cobra cresce, uma parcela cada vez maior
+ * do bodyPath participa do taper.
+ */
+
+const YOUNG_TAIL_BODY_RATIO = 0.16;
+
+const ADULT_TAIL_BODY_RATIO = 0.68;
+
+/*
+ * Para manter a densidade geométrica próxima da base,
+ * limitamos a região customizada.
+ */
+
+const MAX_TAIL_LENGTH = 7;
+
+/* =========================================================
+   ESTABILIDADE
+   ========================================================= */
+
+/*
+ * Em progressos muito próximos de zero ainda usamos
+ * exclusivamente o bodyPath original.
+ *
+ * Não é uma ativação morfológica perceptível:
+ * a primeira forma customizada entra com praticamente
+ * a mesma largura do corpo.
+ */
+
+const MIN_VISIBLE_DEVELOPMENT = 0.002;
 
 export function createSnakeRenderer({ layer }) {
   let bodySvg = null;
@@ -79,6 +171,22 @@ export function createSnakeRenderer({ layer }) {
   let headCore = null;
 
   let latestSnakeLength = 0;
+
+  let initialSnakeLength = 0;
+
+  let activeTailSegmentCount = 0;
+
+  let lastProfileKey = "";
+
+  /*
+   * Buffers fixos.
+   *
+   * Evitam criar arrays a cada frame.
+   */
+
+  const boundaryPoints = new Array(MAX_TAIL_SEGMENT_COUNT + 1);
+
+  const middlePoints = new Array(MAX_TAIL_SEGMENT_COUNT);
 
   /* =======================================================
      PATH SVG
@@ -105,7 +213,13 @@ export function createSnakeRenderer({ layer }) {
 
     const segments = [];
 
-    for (let index = 0; index < TAIL_SEGMENT_COUNT; index += 1) {
+    /*
+     * Todos os elementos são pré-criados.
+     *
+     * Nenhum SVG é criado ou destruído durante o jogo.
+     */
+
+    for (let index = 0; index < MAX_TAIL_SEGMENT_COUNT; index += 1) {
       const path = createBodyPath("snake-tail-segment");
 
       group.appendChild(path);
@@ -142,6 +256,10 @@ export function createSnakeRenderer({ layer }) {
 
     const tail = createTail();
 
+    /*
+     * Ordem original preservada.
+     */
+
     svg.append(depthPath, mainPath, highlightPath, tail.group);
 
     layer.appendChild(svg);
@@ -157,6 +275,10 @@ export function createSnakeRenderer({ layer }) {
     tailGroup = tail.group;
 
     tailSegments = tail.segments;
+
+    activeTailSegmentCount = 0;
+
+    lastProfileKey = "";
   }
 
   /* =======================================================
@@ -165,6 +287,8 @@ export function createSnakeRenderer({ layer }) {
 
   function create(snake, direction) {
     layer.replaceChildren();
+
+    initialSnakeLength = snake.length;
 
     createBodySvg();
 
@@ -203,10 +327,26 @@ export function createSnakeRenderer({ layer }) {
     return Math.max(minimum, Math.min(value, maximum));
   }
 
+  function smoothstep(progress) {
+    const normalized = clamp(progress, 0, 1);
+
+    return normalized * normalized * (3 - 2 * normalized);
+  }
+
   function clearTail() {
-    tailSegments.forEach((segment) => {
-      segment.setAttribute("d", "");
-    });
+    for (let index = 0; index < activeTailSegmentCount; index += 1) {
+      tailSegments[index]?.setAttribute("d", "");
+    }
+
+    activeTailSegmentCount = 0;
+
+    lastProfileKey = "";
+  }
+
+  function clearUnusedTailSegments(fromIndex) {
+    for (let index = fromIndex; index < activeTailSegmentCount; index += 1) {
+      tailSegments[index]?.setAttribute("d", "");
+    }
   }
 
   function resetBodyDash() {
@@ -242,27 +382,247 @@ export function createSnakeRenderer({ layer }) {
   }
 
   /* =======================================================
-     COMPRIMENTO DA CAUDA
+     CRESCIMENTO VISUAL
      ======================================================= */
 
-  function getTailLength(totalLength) {
-    const proportionalLength = totalLength * TAIL_LENGTH_RATIO;
+  function getGrowthAmount(snakeLength) {
+    return Math.max(0, snakeLength - initialSnakeLength);
+  }
 
-    const maximumAllowed = Math.min(MAX_TAIL_LENGTH, totalLength * 0.55);
+  function getVisualGrowthAmount(snake, previousSnake, progress) {
+    const previousGrowth = getGrowthAmount(previousSnake.length);
 
-    const minimumAllowed = Math.min(MIN_TAIL_LENGTH, maximumAllowed);
+    const currentGrowth = getGrowthAmount(snake.length);
 
-    return clamp(proportionalLength, minimumAllowed, maximumAllowed);
+    return lerp(previousGrowth, currentGrowth, progress);
+  }
+
+  function getDevelopment(visualGrowth) {
+    const normalized = clamp(visualGrowth / MORPHOLOGY_GROWTH_TARGET, 0, 1);
+
+    /*
+     * smoothstep evita que cada novo crescimento altere
+     * a anatomia de maneira linear e mecânica.
+     */
+
+    return smoothstep(normalized);
   }
 
   /* =======================================================
-     CAUDA AFUNILADA
+     REGIÃO MORFOLÓGICA
      ======================================================= */
 
-  function renderTail() {
+  function getTailBodyRatio(development) {
+    /*
+     * Este é o comportamento pedido:
+     *
+     * a região de taper começa cada vez mais cedo
+     * dentro do próprio corpo.
+     */
+
+    return lerp(YOUNG_TAIL_BODY_RATIO, ADULT_TAIL_BODY_RATIO, development);
+  }
+
+  function getTailLength(totalLength, development) {
+    const ratio = getTailBodyRatio(development);
+
+    const proportionalLength = totalLength * ratio;
+
+    return Math.min(proportionalLength, MAX_TAIL_LENGTH);
+  }
+
+  /* =======================================================
+     PERFIL
+     ======================================================= */
+
+  function getTailEndWidth(development) {
+    /*
+     * A ponta também amadurece progressivamente.
+     */
+
+    const shapedDevelopment = Math.pow(development, 0.82);
+
+    return lerp(YOUNG_END_WIDTH, ADULT_END_WIDTH, shapedDevelopment);
+  }
+
+  function getTaperExponent(development) {
+    /*
+     * Jovem:
+     * redução quase imperceptível.
+     *
+     * Adulta:
+     * redução começa cedo.
+     */
+
+    return lerp(YOUNG_TAPER_EXPONENT, ADULT_TAPER_EXPONENT, development);
+  }
+
+  function getTailWidth(progress, development) {
+    const normalized = clamp(progress, 0, 1);
+
+    const exponent = getTaperExponent(development);
+
+    const shapedProgress = Math.pow(normalized, exponent);
+
+    /*
+     * Não existe um ponto rígido onde o taper "liga".
+     *
+     * A derivação começa continuamente desde a raiz,
+     * mas na cobra jovem ela é praticamente invisível.
+     */
+
+    const taperProgress = smoothstep(shapedProgress);
+
+    return lerp(BODY_WIDTH, getTailEndWidth(development), taperProgress);
+  }
+
+  /* =======================================================
+     RESOLUÇÃO
+     ======================================================= */
+
+  function getTailSegmentCount(tailLength) {
+    const proportionalCount = Math.ceil(
+      tailLength / TARGET_TAIL_SEGMENT_LENGTH,
+    );
+
+    return clamp(
+      proportionalCount,
+      MIN_TAIL_SEGMENT_COUNT,
+      MAX_TAIL_SEGMENT_COUNT,
+    );
+  }
+
+  /* =======================================================
+     PERFIL DOS SEGMENTOS
+     ======================================================= */
+
+  function updateTailProfile(segmentCount, development) {
+    /*
+     * Fora dos frames de crescimento, development não muda.
+     *
+     * Portanto evitamos 40 writes de stroke-width a cada
+     * frame normal de movimento.
+     */
+
+    const profileKey = `${segmentCount}:` + development.toFixed(4);
+
+    if (profileKey === lastProfileKey) {
+      return;
+    }
+
+    for (let index = 0; index < segmentCount; index += 1) {
+      const progress = segmentCount > 1 ? index / (segmentCount - 1) : 1;
+
+      const width = getTailWidth(progress, development);
+
+      tailSegments[index].setAttribute("stroke-width", width);
+    }
+
+    lastProfileKey = profileKey;
+  }
+
+  /* =======================================================
+     AMOSTRAGEM
+     ======================================================= */
+
+  function sampleTail(tailStart, tailLength, segmentCount) {
+    /*
+     * N + 1 fronteiras.
+     */
+
+    for (let index = 0; index <= segmentCount; index += 1) {
+      const ratio = index / segmentCount;
+
+      const sampleLength = tailStart + tailLength * ratio;
+
+      boundaryPoints[index] = bodyPath.getPointAtLength(sampleLength);
+    }
+
+    /*
+     * N centros.
+     */
+
+    for (let index = 0; index < segmentCount; index += 1) {
+      const ratio = (index + 0.5) / segmentCount;
+
+      const sampleLength = tailStart + tailLength * ratio;
+
+      middlePoints[index] = bodyPath.getPointAtLength(sampleLength);
+    }
+  }
+
+  /* =======================================================
+     DESENHO
+     ======================================================= */
+
+  function drawTail(segmentCount) {
+    /*
+     * Técnica original:
+     *
+     * M start
+     * L middle
+     * L end
+     *
+     * Os round caps continuam sendo os mesmos do CSS.
+     */
+
+    for (let index = 0; index < segmentCount; index += 1) {
+      const startPoint = boundaryPoints[index];
+
+      const middlePoint = middlePoints[index];
+
+      const endPoint = boundaryPoints[index + 1];
+
+      tailSegments[index].setAttribute(
+        "d",
+        `M ${startPoint.x} ${startPoint.y} ` +
+          `L ${middlePoint.x} ${middlePoint.y} ` +
+          `L ${endPoint.x} ${endPoint.y}`,
+      );
+    }
+
+    if (segmentCount < activeTailSegmentCount) {
+      clearUnusedTailSegments(segmentCount);
+    }
+
+    activeTailSegmentCount = segmentCount;
+  }
+
+  /* =======================================================
+     CAUDA
+     ======================================================= */
+
+  function renderTail(snake, previousSnake, progress) {
     if (!bodyPath || !tailGroup || tailSegments.length === 0) {
       return;
     }
+
+    /* -----------------------------------------------------
+       DESENVOLVIMENTO
+       ----------------------------------------------------- */
+
+    const visualGrowth = getVisualGrowthAmount(snake, previousSnake, progress);
+
+    const development = getDevelopment(visualGrowth);
+
+    /*
+     * No nascimento:
+     *
+     * bodyPath integral.
+     * nenhuma cauda customizada.
+     */
+
+    if (development <= MIN_VISIBLE_DEVELOPMENT) {
+      resetBodyDash();
+
+      clearTail();
+
+      return;
+    }
+
+    /* -----------------------------------------------------
+       CENTERLINE
+       ----------------------------------------------------- */
 
     let totalLength = 0;
 
@@ -284,7 +644,11 @@ export function createSnakeRenderer({ layer }) {
       return;
     }
 
-    const tailLength = getTailLength(totalLength);
+    /* -----------------------------------------------------
+       REGIÃO DA CAUDA
+       ----------------------------------------------------- */
+
+    const tailLength = getTailLength(totalLength, development);
 
     if (!Number.isFinite(tailLength) || tailLength <= 0) {
       resetBodyDash();
@@ -296,44 +660,28 @@ export function createSnakeRenderer({ layer }) {
 
     const tailStart = Math.max(0, totalLength - tailLength);
 
+    /*
+     * Este ponto se desloca continuamente para a frente
+     * do corpo conforme development aumenta.
+     */
+
     setBodyVisibleLength(tailStart, totalLength);
 
-    for (let index = 0; index < tailSegments.length; index += 1) {
-      const segment = tailSegments[index];
+    /* -----------------------------------------------------
+       RESOLUÇÃO
+       ----------------------------------------------------- */
 
-      const startRatio = index / tailSegments.length;
+    const segmentCount = getTailSegmentCount(tailLength);
 
-      const endRatio = (index + 1) / tailSegments.length;
+    updateTailProfile(segmentCount, development);
 
-      const middleRatio = (startRatio + endRatio) / 2;
+    /* -----------------------------------------------------
+       RENDER
+       ----------------------------------------------------- */
 
-      const startLength = tailStart + tailLength * startRatio;
+    sampleTail(tailStart, tailLength, segmentCount);
 
-      const middleLength = tailStart + tailLength * middleRatio;
-
-      const endLength = tailStart + tailLength * endRatio;
-
-      const startPoint = bodyPath.getPointAtLength(startLength);
-
-      const middlePoint = bodyPath.getPointAtLength(middleLength);
-
-      const endPoint = bodyPath.getPointAtLength(endLength);
-
-      segment.setAttribute(
-        "d",
-        `M ${startPoint.x} ${startPoint.y} ` +
-          `L ${middlePoint.x} ${middlePoint.y} ` +
-          `L ${endPoint.x} ${endPoint.y}`,
-      );
-
-      const progress = (index + 0.5) / tailSegments.length;
-
-      const taperProgress = Math.pow(progress, 1.55);
-
-      const width = lerp(BODY_WIDTH, TAIL_END_WIDTH, taperProgress);
-
-      segment.setAttribute("stroke-width", width);
-    }
+    drawTail(segmentCount);
   }
 
   /* =======================================================
@@ -365,7 +713,7 @@ export function createSnakeRenderer({ layer }) {
 
     bodyHighlightPath?.setAttribute("d", pathData);
 
-    renderTail();
+    renderTail(snake, previousSnake, progress);
   }
 
   /* =======================================================
