@@ -1,15 +1,14 @@
 /* =========================================================
    JARAKA — SNAKE
 
-   Renderer híbrido:
-   - corpo principal em SVG;
-   - região de taper em Canvas;
-   - padrão corporal em Canvas;
+   Renderer do corpo:
+   - corpo inteiro em Canvas;
+   - taper integrado à mesma superfície;
+   - SVG invisível usado apenas como path geométrico para
+     compatibilidade com as animações de alimentação;
    - crescimento morfológico independente do tick;
-   - superfície preenchida;
-   - amostragem proporcional global REMOVIDA;
-   - superfície ancorada na geometria estrutural do path;
-   - curvas Canvas usam os samples estáveis do path.js.
+   - amostragem proporcional global removida;
+   - curvas usam os samples estruturais estáveis do path.js.
    ========================================================= */
 
 import { GRID_SIZE } from "./game/config.js";
@@ -61,8 +60,6 @@ const MIN_TAIL_END_WIDTH = 0.28;
 
 const MIN_VISIBLE_GROWTH = 0.002;
 
-const BODY_TAIL_OVERLAP = 0.22;
-
 /* =========================================================
    CRESCIMENTO MORFOLÓGICO
    ========================================================= */
@@ -74,34 +71,6 @@ const MORPHOLOGY_FRAME_LIMIT_MS = 50;
 const MORPHOLOGY_SNAP_EPSILON = 0.001;
 
 /* =========================================================
-   PADRÃO CORPORAL
-   ========================================================= */
-
-const BODY_PATTERN_COLOR = "#168a3b";
-
-const BODY_PATTERN_START_DISTANCE = 1.7;
-
-const BODY_PATTERN_SPACING = 1.65;
-
-const BODY_PATTERN_GROWTH_INTERVAL = 1.35;
-
-const BODY_PATTERN_MAX_MARKS = 8;
-
-const BODY_PATTERN_TAIL_CLEARANCE = 0.5;
-
-const BODY_PATTERN_TANGENT_SAMPLE = 0.04;
-
-const BODY_PATTERN_SIDE_OFFSET = 0.17;
-
-const BODY_PATTERN_MAJOR_RADIUS = 0.19;
-
-const BODY_PATTERN_MINOR_RADIUS = 0.085;
-
-const BODY_PATTERN_SECONDARY_SCALE = 0.72;
-
-const BODY_PATTERN_MAX_ALPHA = 0.72;
-
-/* =========================================================
    GEOMETRIA
    ========================================================= */
 
@@ -111,36 +80,58 @@ const CURVE_JOIN_THRESHOLD = 0.002;
 
 const DISTANCE_EPSILON = 0.000001;
 
+/*
+ * Retas pertencentes à região de taper recebem samples
+ * fixos ancorados na própria geometria estrutural.
+ *
+ * Isso mantém a transição de largura suave sem voltar
+ * à antiga redistribuição proporcional da cauda inteira.
+ */
+
+const TAIL_LINE_SAMPLE_SPACING = 0.22;
+
 /* =========================================================
    RENDERER
    ========================================================= */
 
 export function createSnakeRenderer({ layer }) {
+  /* =======================================================
+     SVG AUXILIAR — SOMENTE GEOMETRIA / EATING
+     ======================================================= */
+
   let bodySvg = null;
 
   let bodyPath = null;
 
-  let tailCanvas = null;
+  /* =======================================================
+     CANVAS — CORPO VISUAL
+     ======================================================= */
 
-  let tailContext = null;
+  let bodyCanvas = null;
 
-  let tailColor = "";
+  let bodyContext = null;
 
-  let tailResizeObserver = null;
+  let bodyColor = "";
+
+  let bodyResizeObserver = null;
+
+  let canvasReady = false;
+
+  /* =======================================================
+     CABEÇA
+     ======================================================= */
 
   let headElement = null;
 
   let headCore = null;
 
+  /* =======================================================
+     ESTADO
+     ======================================================= */
+
   let latestSnakeLength = 0;
 
   let initialSnakeLength = 0;
-
-  let canvasReady = false;
-
-  /* =======================================================
-     MORFOLOGIA — ESTADO
-     ======================================================= */
 
   let targetGrowth = 0;
 
@@ -162,10 +153,8 @@ export function createSnakeRenderer({ layer }) {
 
   const directionYs = [];
 
-  let bodyDashMode = null;
-
   /* =======================================================
-     SVG — CORPO
+     SVG AUXILIAR
      ======================================================= */
 
   function createBodyPath(className) {
@@ -189,35 +178,45 @@ export function createSnakeRenderer({ layer }) {
 
     svg.setAttribute("aria-hidden", "true");
 
-    const mainPath = createBodyPath("snake-body-path");
+    const geometryPath = createBodyPath("snake-body-path");
 
-    svg.appendChild(mainPath);
+    /*
+     * O path continua existindo somente para eating.js.
+     *
+     * O corpo visível é desenhado exclusivamente no Canvas.
+     */
+
+    geometryPath.style.opacity = "0";
+
+    geometryPath.style.pointerEvents = "none";
+
+    svg.appendChild(geometryPath);
 
     layer.appendChild(svg);
 
     bodySvg = svg;
 
-    bodyPath = mainPath;
+    bodyPath = geometryPath;
   }
 
   /* =======================================================
      CANVAS — COR
      ======================================================= */
 
-  function resolveTailColor() {
+  function resolveBodyColor() {
     const styles = getComputedStyle(layer);
 
     const color = styles.getPropertyValue("--color-verdyka").trim();
 
-    tailColor = color || "#39ff6a";
+    bodyColor = color || "#39ff6a";
   }
 
   /* =======================================================
      CANVAS — TAMANHO
      ======================================================= */
 
-  function resizeTailCanvas() {
-    if (!tailCanvas || !tailContext) {
+  function resizeBodyCanvas() {
+    if (!bodyCanvas || !bodyContext) {
       return;
     }
 
@@ -235,13 +234,13 @@ export function createSnakeRenderer({ layer }) {
 
     const pixelHeight = Math.max(1, Math.round(rect.height * pixelRatio));
 
-    if (tailCanvas.width !== pixelWidth || tailCanvas.height !== pixelHeight) {
-      tailCanvas.width = pixelWidth;
+    if (bodyCanvas.width !== pixelWidth || bodyCanvas.height !== pixelHeight) {
+      bodyCanvas.width = pixelWidth;
 
-      tailCanvas.height = pixelHeight;
+      bodyCanvas.height = pixelHeight;
     }
 
-    tailContext.setTransform(
+    bodyContext.setTransform(
       pixelWidth / GRID_SIZE,
       0,
       0,
@@ -253,40 +252,40 @@ export function createSnakeRenderer({ layer }) {
     canvasReady = true;
   }
 
-  function createTailCanvas() {
+  function createBodyCanvas() {
     const canvas = document.createElement("canvas");
 
-    canvas.classList.add("snake-tail-canvas");
+    canvas.classList.add("snake-body-canvas");
 
     canvas.setAttribute("aria-hidden", "true");
 
     layer.appendChild(canvas);
 
-    tailCanvas = canvas;
+    bodyCanvas = canvas;
 
-    tailContext = canvas.getContext("2d", {
+    bodyContext = canvas.getContext("2d", {
       alpha: true,
     });
 
-    resolveTailColor();
+    resolveBodyColor();
 
-    resizeTailCanvas();
+    resizeBodyCanvas();
 
     if (typeof ResizeObserver !== "undefined") {
-      tailResizeObserver = new ResizeObserver(() => {
-        resizeTailCanvas();
+      bodyResizeObserver = new ResizeObserver(() => {
+        resizeBodyCanvas();
       });
 
-      tailResizeObserver.observe(layer);
+      bodyResizeObserver.observe(layer);
     }
   }
 
-  function clearTailCanvas() {
-    if (!tailContext || !canvasReady) {
+  function clearBodyCanvas() {
+    if (!bodyContext || !canvasReady) {
       return;
     }
 
-    tailContext.clearRect(0, 0, GRID_SIZE, GRID_SIZE);
+    bodyContext.clearRect(0, 0, GRID_SIZE, GRID_SIZE);
   }
 
   /* =======================================================
@@ -294,10 +293,10 @@ export function createSnakeRenderer({ layer }) {
      ======================================================= */
 
   function create(snake, direction) {
-    if (tailResizeObserver) {
-      tailResizeObserver.disconnect();
+    if (bodyResizeObserver) {
+      bodyResizeObserver.disconnect();
 
-      tailResizeObserver = null;
+      bodyResizeObserver = null;
     }
 
     layer.replaceChildren();
@@ -312,13 +311,11 @@ export function createSnakeRenderer({ layer }) {
 
     lastMorphologyTime = null;
 
-    bodyDashMode = null;
-
     centerPointCount = 0;
 
-    createBodySvg();
+    createBodyCanvas();
 
-    createTailCanvas();
+    createBodySvg();
 
     const head = createHead(layer);
 
@@ -366,12 +363,6 @@ export function createSnakeRenderer({ layer }) {
 
   /* =======================================================
      BÉZIER QUADRÁTICA
-
-     Usa o mesmo parâmetro t que já é
-     calculado e armazenado pelo path.js.
-
-     Não existe nova distribuição global
-     de samples.
      ======================================================= */
 
   function getQuadraticPoint(start, control, end, progress) {
@@ -391,45 +382,12 @@ export function createSnakeRenderer({ layer }) {
   }
 
   /* =======================================================
-     SVG — VISIBILIDADE
-     ======================================================= */
-
-  function resetBodyDash() {
-    if (bodyDashMode === "none") {
-      return;
-    }
-
-    bodyDashMode = "none";
-
-    bodyPath.style.strokeDasharray = "none";
-
-    bodyPath.style.strokeDashoffset = "0";
-  }
-
-  function setBodyVisibleLength(visibleLength, totalLength) {
-    const overlappedVisibleLength = Math.min(
-      totalLength,
-      visibleLength + BODY_TAIL_OVERLAP,
-    );
-
-    const hiddenLength = totalLength + 2;
-
-    bodyDashMode = "tail";
-
-    bodyPath.style.strokeDasharray = `${overlappedVisibleLength} ${hiddenLength}`;
-  }
-
-  /* =======================================================
      CRESCIMENTO
      ======================================================= */
 
   function getGrowthAmount(snakeLength) {
     return Math.max(0, snakeLength - initialSnakeLength);
   }
-
-  /* =======================================================
-     CRESCIMENTO MORFOLÓGICO
-     ======================================================= */
 
   function updateMorphologyGrowth(snakeLength) {
     targetGrowth = getGrowthAmount(snakeLength);
@@ -473,10 +431,20 @@ export function createSnakeRenderer({ layer }) {
     return Math.min(totalLength, visualGrowth * TAIL_LENGTH_PER_GROWTH);
   }
 
+  function getTailWidthGrowth(visualGrowth) {
+    if (visualGrowth <= 0) {
+      return 0;
+    }
+
+    return (visualGrowth * visualGrowth) / (visualGrowth + 2);
+  }
+
   function getTailEndWidth(visualGrowth) {
+    const widthGrowth = getTailWidthGrowth(visualGrowth);
+
     return Math.max(
       MIN_TAIL_END_WIDTH,
-      BODY_WIDTH - visualGrowth * TAIL_WIDTH_LOSS_PER_GROWTH,
+      BODY_WIDTH - widthGrowth * TAIL_WIDTH_LOSS_PER_GROWTH,
     );
   }
 
@@ -489,7 +457,7 @@ export function createSnakeRenderer({ layer }) {
   }
 
   /* =======================================================
-     BUFFER — PONTO ESTRUTURAL
+     BUFFER — PONTO CENTRAL
      ======================================================= */
 
   function pushCenterPoint(point, distance) {
@@ -528,10 +496,64 @@ export function createSnakeRenderer({ layer }) {
   }
 
   /* =======================================================
-     AMOSTRAGEM ESTRUTURAL
+     RETA — SAMPLES ESTÁVEIS DO TAPER
      ======================================================= */
 
-  function buildStructuralTailPoints(pathGeometry, tailStart) {
+  function pushLineTailSamples(segment, tailStart) {
+    const startLength = segment.startLength;
+
+    const endLength = segment.endLength;
+
+    if (endLength <= tailStart + DISTANCE_EPSILON) {
+      return;
+    }
+
+    const firstRelevantDistance = Math.max(tailStart, startLength);
+
+    const firstSampleIndex = Math.max(
+      1,
+      Math.floor(
+        (firstRelevantDistance - startLength) / TAIL_LINE_SAMPLE_SPACING,
+      ) + 1,
+    );
+
+    const segmentLength = endLength - startLength;
+
+    if (segmentLength <= DISTANCE_EPSILON) {
+      return;
+    }
+
+    for (let sampleIndex = firstSampleIndex; ; sampleIndex += 1) {
+      const localDistance = sampleIndex * TAIL_LINE_SAMPLE_SPACING;
+
+      if (localDistance >= segmentLength - DISTANCE_EPSILON) {
+        break;
+      }
+
+      const globalDistance = startLength + localDistance;
+
+      if (globalDistance <= tailStart + DISTANCE_EPSILON) {
+        continue;
+      }
+
+      const progress = localDistance / segmentLength;
+
+      pushCenterPoint(
+        {
+          x: lerp(segment.start.x, segment.end.x, progress),
+
+          y: lerp(segment.start.y, segment.end.y, progress),
+        },
+        globalDistance,
+      );
+    }
+  }
+
+  /* =======================================================
+     AMOSTRAGEM ESTRUTURAL — CORPO INTEIRO
+     ======================================================= */
+
+  function buildStructuralBodyPoints(pathGeometry, tailStart) {
     centerPointCount = 0;
 
     const segments = pathGeometry?.segments ?? [];
@@ -540,13 +562,27 @@ export function createSnakeRenderer({ layer }) {
       return 0;
     }
 
-    /*
-     * Único corte realmente dinâmico.
-     */
+    const firstSegment = segments[0];
 
-    const startPoint = sampleRoundedPathAtLength(pathGeometry, tailStart);
+    pushCenterPoint(firstSegment.start, firstSegment.startLength);
 
-    pushCenterPoint(startPoint, tailStart);
+    let tailStartInserted = tailStart <= DISTANCE_EPSILON;
+
+    function insertTailStartBefore(distance) {
+      if (tailStartInserted) {
+        return;
+      }
+
+      if (distance <= tailStart + DISTANCE_EPSILON) {
+        return;
+      }
+
+      const tailStartPoint = sampleRoundedPathAtLength(pathGeometry, tailStart);
+
+      pushCenterPoint(tailStartPoint, tailStart);
+
+      tailStartInserted = true;
+    }
 
     for (
       let segmentIndex = 0;
@@ -555,15 +591,30 @@ export function createSnakeRenderer({ layer }) {
     ) {
       const segment = segments[segmentIndex];
 
-      if (segment.endLength <= tailStart + DISTANCE_EPSILON) {
-        continue;
-      }
-
       /* ===================================================
          RETA
          =================================================== */
 
       if (segment.type === "line") {
+        if (
+          !tailStartInserted &&
+          tailStart > segment.startLength + DISTANCE_EPSILON &&
+          tailStart < segment.endLength - DISTANCE_EPSILON
+        ) {
+          const tailStartPoint = sampleRoundedPathAtLength(
+            pathGeometry,
+            tailStart,
+          );
+
+          pushCenterPoint(tailStartPoint, tailStart);
+
+          tailStartInserted = true;
+        }
+
+        pushLineTailSamples(segment, tailStart);
+
+        insertTailStartBefore(segment.endLength);
+
         pushCenterPoint(segment.end, segment.endLength);
 
         continue;
@@ -576,29 +627,6 @@ export function createSnakeRenderer({ layer }) {
       if (segment.type === "quadratic") {
         const samples = segment.samples ?? [];
 
-        /*
-         * IMPORTANTE:
-         *
-         * path.js armazena t + comprimento.
-         *
-         * Ele NÃO armazena sample.point.
-         *
-         * Antes tentávamos acessar:
-         *
-         * sample.point
-         *
-         * Como era undefined, pushCenterPoint()
-         * simplesmente ignorava o sample.
-         *
-         * Resultado:
-         * a curva inteira era praticamente
-         * reduzida ao endpoint.
-         *
-         * Agora calculamos o ponto real da
-         * mesma Bézier usando o t estrutural
-         * já fornecido pelo path.js.
-         */
-
         for (
           let sampleIndex = 1;
           sampleIndex < samples.length;
@@ -608,9 +636,7 @@ export function createSnakeRenderer({ layer }) {
 
           const globalDistance = segment.startLength + sample.length;
 
-          if (globalDistance <= tailStart + DISTANCE_EPSILON) {
-            continue;
-          }
+          insertTailStartBefore(globalDistance);
 
           const point = getQuadraticPoint(
             segment.start,
@@ -622,15 +648,22 @@ export function createSnakeRenderer({ layer }) {
           pushCenterPoint(point, globalDistance);
         }
 
-        /*
-         * O último sample normalmente já
-         * coincide com segment.end.
-         *
-         * pushCenterPoint remove a duplicata
-         * sem gerar outro nó.
-         */
+        insertTailStartBefore(segment.endLength);
 
         pushCenterPoint(segment.end, segment.endLength);
+      }
+    }
+
+    if (!tailStartInserted) {
+      const totalLength = pathGeometry?.totalLength ?? 0;
+
+      if (tailStart < totalLength - DISTANCE_EPSILON) {
+        const tailStartPoint = sampleRoundedPathAtLength(
+          pathGeometry,
+          tailStart,
+        );
+
+        pushCenterPoint(tailStartPoint, tailStart);
       }
     }
 
@@ -641,7 +674,7 @@ export function createSnakeRenderer({ layer }) {
      LARGURAS E DIREÇÕES
      ======================================================= */
 
-  function prepareTailGeometry(tailStart, tailLength, visualGrowth) {
+  function prepareBodyGeometry(tailStart, tailLength, visualGrowth) {
     const pointCount = centerPointCount;
 
     const segmentCount = Math.max(0, pointCount - 1);
@@ -652,31 +685,37 @@ export function createSnakeRenderer({ layer }) {
 
     directionYs.length = segmentCount;
 
-    let previousWidth = BODY_WIDTH;
+    let taperPreviousWidth = BODY_WIDTH;
 
     for (let index = 0; index < pointCount; index += 1) {
       const point = centerPoints[index];
 
-      const progress =
-        tailLength <= DISTANCE_EPSILON
-          ? 1
-          : clamp((point.distance - tailStart) / tailLength, 0, 1);
+      let width = BODY_WIDTH;
 
-      let width =
-        index === 0 ? BODY_WIDTH : getTailWidth(progress, visualGrowth);
+      if (
+        visualGrowth > MIN_VISIBLE_GROWTH &&
+        tailLength > DISTANCE_EPSILON &&
+        point.distance > tailStart + DISTANCE_EPSILON
+      ) {
+        const progress = clamp((point.distance - tailStart) / tailLength, 0, 1);
 
-      /*
-       * Invariante fundamental:
-       *
-       * depois que começa o taper,
-       * a largura jamais aumenta.
-       */
+        width = getTailWidth(progress, visualGrowth);
 
-      width = Math.min(previousWidth, width);
+        /*
+         * Invariante fundamental:
+         *
+         * depois que o taper começa,
+         * a largura nunca aumenta.
+         */
+
+        width = Math.min(taperPreviousWidth, width);
+      }
 
       boundaryWidths[index] = width;
 
-      previousWidth = width;
+      if (point.distance >= tailStart - DISTANCE_EPSILON) {
+        taperPreviousWidth = width;
+      }
     }
 
     for (let index = 0; index < segmentCount; index += 1) {
@@ -717,7 +756,7 @@ export function createSnakeRenderer({ layer }) {
       return;
     }
 
-    tailContext.beginPath();
+    bodyContext.beginPath();
 
     for (let index = 0; index < segmentCount; index += 1) {
       const directionX = directionXs[index];
@@ -748,18 +787,18 @@ export function createSnakeRenderer({ layer }) {
 
       const endOffsetY = normalY * endRadius;
 
-      tailContext.moveTo(start.x + startOffsetX, start.y + startOffsetY);
+      bodyContext.moveTo(start.x + startOffsetX, start.y + startOffsetY);
 
-      tailContext.lineTo(end.x + endOffsetX, end.y + endOffsetY);
+      bodyContext.lineTo(end.x + endOffsetX, end.y + endOffsetY);
 
-      tailContext.lineTo(end.x - endOffsetX, end.y - endOffsetY);
+      bodyContext.lineTo(end.x - endOffsetX, end.y - endOffsetY);
 
-      tailContext.lineTo(start.x - startOffsetX, start.y - startOffsetY);
+      bodyContext.lineTo(start.x - startOffsetX, start.y - startOffsetY);
 
-      tailContext.closePath();
+      bodyContext.closePath();
     }
 
-    tailContext.fill();
+    bodyContext.fill();
   }
 
   /* =======================================================
@@ -773,7 +812,7 @@ export function createSnakeRenderer({ layer }) {
       return;
     }
 
-    tailContext.beginPath();
+    bodyContext.beginPath();
 
     let hasJoint = false;
 
@@ -805,296 +844,91 @@ export function createSnakeRenderer({ layer }) {
 
       const radius = boundaryWidths[index] * 0.5;
 
-      tailContext.moveTo(point.x + radius, point.y);
+      bodyContext.moveTo(point.x + radius, point.y);
 
-      tailContext.arc(point.x, point.y, radius, 0, Math.PI * 2);
+      bodyContext.arc(point.x, point.y, radius, 0, Math.PI * 2);
 
       hasJoint = true;
     }
 
     if (hasJoint) {
-      tailContext.fill();
+      bodyContext.fill();
     }
   }
 
   /* =======================================================
-     SUPERFÍCIE — PONTA
+     SUPERFÍCIE — EXTREMIDADES
      ======================================================= */
 
-  function fillTailTip() {
-    const pointCount = centerPointCount;
-
-    if (pointCount === 0) {
+  function fillBodyCaps() {
+    if (centerPointCount === 0) {
       return;
     }
 
-    const tipIndex = pointCount - 1;
+    const start = centerPoints[0];
+
+    const startRadius = boundaryWidths[0] * 0.5;
+
+    const tipIndex = centerPointCount - 1;
 
     const tip = centerPoints[tipIndex];
 
-    const tipRadius = boundaryWidths[tipIndex] / 2;
+    const tipRadius = boundaryWidths[tipIndex] * 0.5;
 
-    if (!tip || !Number.isFinite(tipRadius) || tipRadius <= 0) {
-      return;
+    bodyContext.beginPath();
+
+    if (start && Number.isFinite(startRadius) && startRadius > 0) {
+      bodyContext.moveTo(start.x + startRadius, start.y);
+
+      bodyContext.arc(start.x, start.y, startRadius, 0, Math.PI * 2);
     }
 
-    tailContext.beginPath();
+    if (tip && Number.isFinite(tipRadius) && tipRadius > 0) {
+      bodyContext.moveTo(tip.x + tipRadius, tip.y);
 
-    tailContext.arc(tip.x, tip.y, tipRadius, 0, Math.PI * 2);
+      bodyContext.arc(tip.x, tip.y, tipRadius, 0, Math.PI * 2);
+    }
 
-    tailContext.fill();
+    bodyContext.fill();
   }
 
   /* =======================================================
-     DESENHO DA CAUDA
+     DESENHO DO CORPO INTEIRO
      ======================================================= */
 
-  function drawTailSurface() {
-    if (!tailContext || !canvasReady) {
-      return;
-    }
-
-    if (centerPointCount < 2) {
-      return;
-    }
-
-    tailContext.fillStyle = tailColor;
-
-    buildSurfaceSegments();
-
-    fillCurveJoints();
-
-    fillTailTip();
-  }
-
-  /* =======================================================
-     CAUDA
-     ======================================================= */
-
-  function renderTail(visualGrowth, pathGeometry) {
-    if (!bodyPath || !tailCanvas || !tailContext) {
-      return;
-    }
-
-    if (visualGrowth <= MIN_VISIBLE_GROWTH) {
-      resetBodyDash();
-
+  function renderBodySurface(visualGrowth, pathGeometry) {
+    if (!bodyContext || !canvasReady) {
       return;
     }
 
     const totalLength = pathGeometry?.totalLength ?? 0;
 
     if (!Number.isFinite(totalLength) || totalLength <= 0) {
-      resetBodyDash();
-
       return;
     }
 
-    const tailLength = getTailLength(totalLength, visualGrowth);
-
-    if (!Number.isFinite(tailLength) || tailLength <= 0) {
-      resetBodyDash();
-
-      return;
-    }
+    const tailLength =
+      visualGrowth > MIN_VISIBLE_GROWTH
+        ? getTailLength(totalLength, visualGrowth)
+        : 0;
 
     const tailStart = Math.max(0, totalLength - tailLength);
 
-    setBodyVisibleLength(tailStart, totalLength);
-
-    const pointCount = buildStructuralTailPoints(pathGeometry, tailStart);
+    const pointCount = buildStructuralBodyPoints(pathGeometry, tailStart);
 
     if (pointCount < 2) {
       return;
     }
 
-    prepareTailGeometry(tailStart, tailLength, visualGrowth);
+    prepareBodyGeometry(tailStart, tailLength, visualGrowth);
 
-    drawTailSurface();
-  }
+    bodyContext.fillStyle = bodyColor;
 
-  /* =======================================================
-     PADRÃO — OPACIDADE
-     ======================================================= */
+    buildSurfaceSegments();
 
-  function getPatternMarkOpacity(markIndex, visualGrowth) {
-    const appearanceGrowth = (markIndex + 1) * BODY_PATTERN_GROWTH_INTERVAL;
+    fillCurveJoints();
 
-    const progress = clamp(visualGrowth - appearanceGrowth + 1, 0, 1);
-
-    const eased = progress * progress * (3 - 2 * progress);
-
-    return eased * BODY_PATTERN_MAX_ALPHA;
-  }
-
-  /* =======================================================
-     PADRÃO — MANCHA
-     ======================================================= */
-
-  function drawPatternEllipse(x, y, angle, radiusX, radiusY, alpha) {
-    tailContext.save();
-
-    tailContext.translate(x, y);
-
-    tailContext.rotate(angle);
-
-    tailContext.globalAlpha = alpha;
-
-    tailContext.beginPath();
-
-    tailContext.ellipse(0, 0, radiusX, radiusY, 0, 0, Math.PI * 2);
-
-    tailContext.fill();
-
-    tailContext.restore();
-  }
-
-  /* =======================================================
-     PADRÃO — CORPO
-     ======================================================= */
-
-  function renderBodyPattern(pathGeometry, visualGrowth) {
-    if (!tailContext || !canvasReady || visualGrowth <= MIN_VISIBLE_GROWTH) {
-      return;
-    }
-
-    const totalLength = pathGeometry?.totalLength ?? 0;
-
-    if (!Number.isFinite(totalLength) || totalLength <= 0) {
-      return;
-    }
-
-    const tailLength = getTailLength(totalLength, visualGrowth);
-
-    const tailStart = Math.max(0, totalLength - tailLength);
-
-    const patternEnd = Math.max(0, tailStart - BODY_PATTERN_TAIL_CLEARANCE);
-
-    if (patternEnd <= BODY_PATTERN_START_DISTANCE) {
-      return;
-    }
-
-    const visibleMarkCount = Math.min(
-      BODY_PATTERN_MAX_MARKS,
-      Math.ceil(visualGrowth / BODY_PATTERN_GROWTH_INTERVAL),
-    );
-
-    if (visibleMarkCount <= 0) {
-      return;
-    }
-
-    tailContext.fillStyle = BODY_PATTERN_COLOR;
-
-    for (let markIndex = 0; markIndex < visibleMarkCount; markIndex += 1) {
-      const distance =
-        BODY_PATTERN_START_DISTANCE + markIndex * BODY_PATTERN_SPACING;
-
-      if (distance >= patternEnd) {
-        break;
-      }
-
-      const point = sampleRoundedPathAtLength(pathGeometry, distance);
-
-      if (!point) {
-        continue;
-      }
-
-      const tangentDistance = Math.min(
-        patternEnd,
-        distance + BODY_PATTERN_TANGENT_SAMPLE,
-      );
-
-      const tangentPoint = sampleRoundedPathAtLength(
-        pathGeometry,
-        tangentDistance,
-      );
-
-      if (!tangentPoint) {
-        continue;
-      }
-
-      let directionX = tangentPoint.x - point.x;
-
-      let directionY = tangentPoint.y - point.y;
-
-      let directionLength = Math.hypot(directionX, directionY);
-
-      if (directionLength <= MIN_VECTOR_LENGTH) {
-        const previousDistance = Math.max(
-          0,
-          distance - BODY_PATTERN_TANGENT_SAMPLE,
-        );
-
-        const previousPoint = sampleRoundedPathAtLength(
-          pathGeometry,
-          previousDistance,
-        );
-
-        if (!previousPoint) {
-          continue;
-        }
-
-        directionX = point.x - previousPoint.x;
-
-        directionY = point.y - previousPoint.y;
-
-        directionLength = Math.hypot(directionX, directionY);
-      }
-
-      if (directionLength <= MIN_VECTOR_LENGTH) {
-        continue;
-      }
-
-      const inverseLength = 1 / directionLength;
-
-      directionX *= inverseLength;
-
-      directionY *= inverseLength;
-
-      const normalX = -directionY;
-
-      const normalY = directionX;
-
-      const angle = Math.atan2(directionY, directionX);
-
-      const side = markIndex % 2 === 0 ? 1 : -1;
-
-      const alpha = getPatternMarkOpacity(markIndex, visualGrowth);
-
-      if (alpha <= 0) {
-        continue;
-      }
-
-      const primaryX = point.x + normalX * BODY_PATTERN_SIDE_OFFSET * side;
-
-      const primaryY = point.y + normalY * BODY_PATTERN_SIDE_OFFSET * side;
-
-      drawPatternEllipse(
-        primaryX,
-        primaryY,
-        angle,
-        BODY_PATTERN_MAJOR_RADIUS,
-        BODY_PATTERN_MINOR_RADIUS,
-        alpha,
-      );
-
-      const secondaryX =
-        point.x - normalX * BODY_PATTERN_SIDE_OFFSET * 0.78 * side;
-
-      const secondaryY =
-        point.y - normalY * BODY_PATTERN_SIDE_OFFSET * 0.78 * side;
-
-      drawPatternEllipse(
-        secondaryX,
-        secondaryY,
-        angle,
-        BODY_PATTERN_MAJOR_RADIUS * BODY_PATTERN_SECONDARY_SCALE,
-        BODY_PATTERN_MINOR_RADIUS * BODY_PATTERN_SECONDARY_SCALE,
-        alpha * 0.82,
-      );
-    }
-
-    tailContext.globalAlpha = 1;
+    fillBodyCaps();
   }
 
   /* =======================================================
@@ -1120,15 +954,19 @@ export function createSnakeRenderer({ layer }) {
 
     const pathGeometry = buildRoundedPathGeometry(points);
 
+    /*
+     * O SVG não desenha o corpo.
+     *
+     * Apenas acompanha a geometria para eating.js.
+     */
+
     bodyPath.setAttribute("d", pathGeometry.pathData);
 
-    clearTailCanvas();
+    clearBodyCanvas();
 
     const visualGrowth = updateMorphologyGrowth(snake.length);
 
-    renderTail(visualGrowth, pathGeometry);
-
-    renderBodyPattern(pathGeometry, visualGrowth);
+    renderBodySurface(visualGrowth, pathGeometry);
   }
 
   /* =======================================================
