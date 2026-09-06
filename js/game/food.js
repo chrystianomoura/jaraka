@@ -5,6 +5,7 @@
    Responsabilidades:
    - manter a posição lógica do rato;
    - encontrar células livres;
+   - respeitar margem visual segura;
    - escolher uma nova posição;
    - atualizar a posição visual;
    - controlar o primeiro spawn;
@@ -17,6 +18,32 @@
 import { GRID_COLUMNS, GRID_ROWS } from "./config.js";
 
 import { isSamePosition } from "./collision.js";
+
+/* =========================================================
+   ÁREA SEGURA DO RATO
+   ========================================================= */
+
+/*
+ * O rato é propositalmente maior que uma célula
+ * e possui animações com:
+ *
+ * - salto;
+ * - rotação;
+ * - squash;
+ * - stretch.
+ *
+ * Por isso ele não deve nascer diretamente
+ * nas células periféricas da arena.
+ *
+ * Isso NÃO altera o tamanho do rato.
+ * Apenas garante espaço para sua animação.
+ */
+
+const SAFE_MARGIN_LEFT = 1;
+const SAFE_MARGIN_RIGHT = 1;
+
+const SAFE_MARGIN_TOP = 1;
+const SAFE_MARGIN_BOTTOM = 1;
 
 /* =========================================================
    CONTROLLER
@@ -49,7 +76,7 @@ export function createFoodController({
   }
 
   /* =======================================================
-     CÉLULAS LIVRES
+     COBRA
      ======================================================= */
 
   function isSnakePosition(candidate) {
@@ -57,6 +84,31 @@ export function createFoodController({
 
     return snake.some((segment) => isSamePosition(segment, candidate));
   }
+
+  /* =======================================================
+     ÁREA SEGURA
+     ======================================================= */
+
+  function isSafeMouseCell(candidate) {
+    const minimumX = SAFE_MARGIN_LEFT;
+
+    const maximumX = GRID_COLUMNS - 1 - SAFE_MARGIN_RIGHT;
+
+    const minimumY = SAFE_MARGIN_TOP;
+
+    const maximumY = GRID_ROWS - 1 - SAFE_MARGIN_BOTTOM;
+
+    return (
+      candidate.x >= minimumX &&
+      candidate.x <= maximumX &&
+      candidate.y >= minimumY &&
+      candidate.y <= maximumY
+    );
+  }
+
+  /* =======================================================
+     CÉLULAS LIVRES
+     ======================================================= */
 
   function getFreeCells() {
     const freeCells = [];
@@ -68,9 +120,15 @@ export function createFoodController({
           y,
         };
 
-        if (!isSnakePosition(candidate)) {
-          freeCells.push(candidate);
+        if (!isSafeMouseCell(candidate)) {
+          continue;
         }
+
+        if (isSnakePosition(candidate)) {
+          continue;
+        }
+
+        freeCells.push(candidate);
       }
     }
 
@@ -93,11 +151,7 @@ export function createFoodController({
     const nextPosition = freeCells[randomIndex];
 
     /*
-     * Não substituímos o objeto.
-     *
-     * Alteramos suas propriedades para
-     * preservar a mesma referência usada
-     * pelo mouseController.
+     * Mantemos a mesma referência do objeto.
      */
 
     position.x = nextPosition.x;
@@ -140,14 +194,6 @@ export function createFoodController({
       return;
     }
 
-    /*
-     * Cancela somente animações criadas
-     * pela Web Animations API.
-     *
-     * As animações CSS do rato continuam
-     * pertencendo ao stylesheet.
-     */
-
     actor
       .getAnimations()
       .filter(
@@ -170,7 +216,7 @@ export function createFoodController({
   }
 
   /* =======================================================
-     REINICIALIZAÇÃO DA ANIMAÇÃO CSS
+     REINICIALIZAÇÃO DA ANIMAÇÃO
      ======================================================= */
 
   function restartActorAnimation() {
@@ -213,6 +259,8 @@ export function createFoodController({
     const spawned = moveToRandomCell();
 
     if (!spawned) {
+      actor.style.visibility = "";
+
       return;
     }
 

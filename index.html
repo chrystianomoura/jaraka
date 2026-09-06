@@ -15,70 +15,93 @@
   <body>
     <main class="game-shell">
       <section class="game-stage" aria-label="JARAKA">
+        <!-- =================================================
+             HUD
+             ================================================= -->
+
         <header class="game-hud">
-          <div class="game-identity">
-            <h1 class="game-title">JARAKA</h1>
+          <h1 class="game-title">JARAKA</h1>
 
-            <p class="game-mode">
-              <span class="game-mode__label"> MODE </span>
-
-              <span class="game-mode__separator" aria-hidden="true"> · </span>
-
-              <strong class="game-mode__value" id="game-mode"> WALL </strong>
-            </p>
-          </div>
-
-          <div class="game-stats" aria-label="Pontuação da partida">
+          <div class="game-info" aria-label="Informações da partida">
             <div class="game-stat">
-              <span class="game-stat__label"> SCORE </span>
+              <span class="game-stat__label">SCORE</span>
 
-              <strong class="game-stat__value" id="score"> 000000 </strong>
+              <strong class="game-stat__value" id="score">00</strong>
+            </div>
+
+            <div class="game-mode">
+              <span class="game-mode__label">MODE</span>
+
+              <strong class="game-mode__value" id="game-mode"> NO WALL </strong>
             </div>
 
             <div class="game-stat game-stat--high-score">
-              <span class="game-stat__label"> HIGH SCORE </span>
+              <span class="game-stat__label">HIGH SCORE</span>
 
-              <strong class="game-stat__value" id="high-score"> 000000 </strong>
+              <strong class="game-stat__value" id="high-score"> 00 </strong>
             </div>
           </div>
         </header>
 
+        <!-- =================================================
+             BOARD
+             ================================================= -->
+
         <section class="game-board" aria-label="Tabuleiro da JARAKA">
-          <div class="mouse-food is-angry" aria-label="Ratinho">
-            <div class="mouse-actor">
-              <div class="mouse-core">
-                <span class="mouse-ear mouse-ear--left"></span>
+          <!-- ===============================================
+               VIEWPORT INTERNA
 
-                <span class="mouse-ear mouse-ear--right"></span>
+               Tudo que pertence ao jogo fica dentro desta
+               camada e é recortado nos limites da arena.
+               =============================================== -->
 
-                <div class="mouse-face">
-                  <span class="mouse-brow mouse-brow--left"></span>
+          <div class="game-board__viewport">
+            <!-- =============================================
+                 RATO
+                 ============================================= -->
 
-                  <span class="mouse-brow mouse-brow--right"></span>
+            <div class="mouse-food is-angry" aria-label="Ratinho">
+              <div class="mouse-actor">
+                <div class="mouse-core">
+                  <span class="mouse-ear mouse-ear--left"></span>
 
-                  <span class="mouse-eye mouse-eye--left"></span>
+                  <span class="mouse-ear mouse-ear--right"></span>
 
-                  <span class="mouse-eye mouse-eye--right"></span>
+                  <div class="mouse-face">
+                    <span class="mouse-brow mouse-brow--left"></span>
 
-                  <span class="mouse-nose"></span>
+                    <span class="mouse-brow mouse-brow--right"></span>
 
-                  <span class="mouse-mouth"></span>
+                    <span class="mouse-eye mouse-eye--left"></span>
 
-                  <span class="mouse-whisker mouse-whisker--left-top"></span>
+                    <span class="mouse-eye mouse-eye--right"></span>
 
-                  <span class="mouse-whisker mouse-whisker--left-bottom"></span>
+                    <span class="mouse-nose"></span>
 
-                  <span class="mouse-whisker mouse-whisker--right-top"></span>
+                    <span class="mouse-mouth"></span>
 
-                  <span
-                    class="mouse-whisker mouse-whisker--right-bottom"
-                  ></span>
+                    <span class="mouse-whisker mouse-whisker--left-top"></span>
+
+                    <span
+                      class="mouse-whisker mouse-whisker--left-bottom"
+                    ></span>
+
+                    <span class="mouse-whisker mouse-whisker--right-top"></span>
+
+                    <span
+                      class="mouse-whisker mouse-whisker--right-bottom"
+                    ></span>
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
 
-          <div class="snake-layer" aria-label="Verdyka"></div>
+            <!-- =============================================
+                 JARAKA
+                 ============================================= -->
+
+            <div class="snake-layer" aria-label="Verdyka"></div>
+          </div>
         </section>
       </section>
     </main>

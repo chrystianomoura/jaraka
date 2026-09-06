@@ -1,10 +1,10 @@
 /* =========================================================
    JARAKA — BOARD
-   Tabuleiro principal
+   Arena principal
    ========================================================= */
 
 /* =========================================================
-   BOARD
+   BOARD EXTERNO
    ========================================================= */
 
 .game-board {
@@ -15,34 +15,20 @@
   width: var(--board-width);
   height: var(--board-height);
 
-  align-self: end;
+  align-self: start;
   justify-self: center;
 
   flex: 0 0 auto;
 
-  background-color: var(--color-board);
-
-  background-image:
-    linear-gradient(
-      to right,
-      var(--color-grid) 1px,
-      transparent 1px
-    ),
-    linear-gradient(
-      to bottom,
-      var(--color-grid) 1px,
-      transparent 1px
-    ),
-    radial-gradient(
-      circle at 0 0,
-      rgba(70, 210, 255, 0.58) 1.15px,
-      transparent 1.45px
-    );
-
-  background-size:
-    var(--cell-size) var(--cell-size),
-    var(--cell-size) var(--cell-size),
-    var(--cell-size) var(--cell-size);
+  /*
+   * IMPORTANTE:
+   *
+   * O board externo continua permitindo overflow,
+   * porque a moldura neon vive fora da arena.
+   *
+   * O clipping dos atores acontece dentro de
+   * .game-board__viewport.
+   */
 
   overflow: visible;
 
@@ -50,7 +36,84 @@
 }
 
 /* =========================================================
-   FRAME
+   VIEWPORT INTERNA
+   ========================================================= */
+
+.game-board__viewport {
+  position: absolute;
+
+  inset: 0;
+
+  width: 100%;
+  height: 100%;
+
+  /*
+   * Este é o limite físico real da arena.
+   *
+   * Jaraka, rato, canvas e SVG não podem aparecer
+   * além deste retângulo.
+   */
+
+  overflow: hidden;
+
+  background-color: var(--color-board);
+
+  background-image:
+    linear-gradient(to right, var(--color-grid) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--color-grid) 1px, transparent 1px),
+    radial-gradient(
+      circle at 0 0,
+      rgba(76, 142, 255, 0.72) 1px,
+      transparent 1.35px
+    ),
+    radial-gradient(
+      circle at 50% 44%,
+      rgba(34, 83, 183, 0.08) 0%,
+      transparent 70%
+    ),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.012) 0%, transparent 20%);
+
+  background-size:
+    var(--cell-size) var(--cell-size),
+    var(--cell-size) var(--cell-size),
+    var(--cell-size) var(--cell-size),
+    100% 100%,
+    100% 100%;
+
+  background-position:
+    0 0,
+    0 0,
+    0 0,
+    center,
+    center;
+
+  z-index: 1;
+}
+
+/* =========================================================
+   BORDA INTERNA
+   ========================================================= */
+
+.game-board__viewport::after {
+  content: "";
+
+  position: absolute;
+
+  inset: 0;
+
+  border: 1px solid rgba(85, 132, 255, 0.18);
+
+  box-shadow:
+    inset 0 0 0 1px rgba(0, 0, 0, 0.28),
+    inset 0 0 26px rgba(0, 0, 0, 0.18);
+
+  pointer-events: none;
+
+  z-index: 1000;
+}
+
+/* =========================================================
+   MOLDURA EXTERNA
    ========================================================= */
 
 .game-board::after {
@@ -60,12 +123,15 @@
 
   inset: calc(-1 * var(--board-frame-outset));
 
-  border:
-    var(--board-frame-width)
-    solid
-    var(--color-board-border);
+  border: var(--board-frame-width) solid var(--color-board-border);
 
-  border-radius: 12px;
+  border-radius: 10px;
+
+  box-shadow:
+    0 0 0 1px rgba(79, 141, 255, 0.18),
+    0 0 8px rgba(79, 141, 255, 0.42),
+    0 0 18px rgba(79, 141, 255, 0.16),
+    inset 0 0 0 1px rgba(155, 195, 255, 0.3);
 
   pointer-events: none;
 
@@ -73,34 +139,70 @@
 }
 
 /* =========================================================
-   INTERNAL GLOW
+   CAMADAS INTERNAS
    ========================================================= */
 
-.game-board::before {
-  content: "";
-
+.game-board__viewport > * {
   position: absolute;
-
-  inset: 0;
-
-  background:
-    radial-gradient(
-      circle at 50% 50%,
-      rgba(41, 92, 255, 0.035),
-      transparent 68%
-    );
-
-  pointer-events: none;
-
-  z-index: 0;
 }
 
 /* =========================================================
-   BOX MODEL
+   SNAKE
+   ========================================================= */
+
+.snake-layer {
+  inset: 0;
+
+  width: 100%;
+  height: 100%;
+
+  z-index: 20;
+}
+
+/* =========================================================
+   RATO
+   ========================================================= */
+
+.mouse-food {
+  z-index: 30;
+}
+
+/* =========================================================
+   BOX SIZING
    ========================================================= */
 
 .game-board,
-.game-board::before,
-.game-board::after {
+.game-board::after,
+.game-board__viewport,
+.game-board__viewport::after {
   box-sizing: border-box;
+}
+
+/* =========================================================
+   VIEWPORTS ESTREITAS
+   ========================================================= */
+
+@media (max-width: 340px) {
+  .game-board::after {
+    border-radius: 9px;
+
+    box-shadow:
+      0 0 0 1px rgba(79, 141, 255, 0.16),
+      0 0 6px rgba(79, 141, 255, 0.36),
+      0 0 14px rgba(79, 141, 255, 0.12),
+      inset 0 0 0 1px rgba(155, 195, 255, 0.26);
+  }
+}
+
+/* =========================================================
+   VIEWPORTS BAIXAS
+   ========================================================= */
+
+@media (max-height: 560px) {
+  .game-board::after {
+    box-shadow:
+      0 0 0 1px rgba(79, 141, 255, 0.14),
+      0 0 6px rgba(79, 141, 255, 0.3),
+      inset 0 0 0 1px rgba(155, 195, 255, 0.22);
+  }
 }

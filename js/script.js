@@ -36,13 +36,21 @@ const mouseActor = mouseFood?.querySelector(".mouse-actor");
    CONFIGURAÇÃO INICIAL DA PARTIDA
    ========================================================= */
 
+/*
+ * Arena:
+ * 10 colunas × 22 linhas.
+ *
+ * A Jaraka começa centralizada horizontalmente,
+ * com espaço livre dos dois lados.
+ */
+
 const initialSnake = [
-  { x: 9, y: 11 },
-  { x: 8, y: 11 },
   { x: 7, y: 11 },
   { x: 6, y: 11 },
   { x: 5, y: 11 },
   { x: 4, y: 11 },
+  { x: 3, y: 11 },
+  { x: 2, y: 11 },
 ];
 
 /* =========================================================
