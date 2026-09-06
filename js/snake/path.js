@@ -12,8 +12,6 @@
    - arredondamento das curvas;
    - geração do path SVG;
    - geometria amostrável sem consultas ao DOM.
-
-   Este módulo não manipula DOM.
    ========================================================= */
 
 import { EPSILON } from "../game/config.js";
@@ -21,6 +19,27 @@ import { EPSILON } from "../game/config.js";
 const CORNER_RADIUS = 0.18;
 
 const QUADRATIC_LENGTH_STEPS = 8;
+
+/*
+ * Todas as curvas produzidas por este módulo
+ * são quadráticas ortogonais de 90°.
+ *
+ * A forma normalizada é sempre a mesma.
+ * Somente o raio muda.
+ *
+ * Portanto não precisamos recalcular,
+ * em todo frame e para toda curva,
+ * os oito comprimentos intermediários.
+ */
+
+const QUADRATIC_UNIT_SAMPLE_LENGTHS = [
+  0, 0.2348952559120767, 0.4433587569140507, 0.6321563502514659,
+  0.8103087604232062, 0.9884611705949465, 1.1772587639323617,
+  1.3857222649343357, 1.6206175208464124,
+];
+
+const QUADRATIC_UNIT_LENGTH =
+  QUADRATIC_UNIT_SAMPLE_LENGTHS[QUADRATIC_UNIT_SAMPLE_LENGTHS.length - 1];
 
 /* =========================================================
    INTERPOLAÇÃO
@@ -99,47 +118,51 @@ function findTailCorner(snake, previousSnake, previousTail, currentTail) {
     return null;
   }
 
-  const candidates = [];
-
   const previousBeforeTail = previousSnake[previousSnake.length - 2];
 
   const currentBeforeTail = snake[snake.length - 2];
 
-  if (previousBeforeTail) {
-    candidates.push(previousBeforeTail);
-  }
+  let bestCandidate = null;
 
-  if (currentBeforeTail) {
-    candidates.push(currentBeforeTail);
-  }
+  let bestDistance = Infinity;
 
-  const validCandidates = candidates.filter(
-    (candidate) =>
-      isOrthogonal(previousTail, candidate) &&
-      isOrthogonal(candidate, currentTail),
-  );
+  /*
+   * No máximo existem dois candidatos.
+   *
+   * Evitamos criar array + filter
+   * a cada frame.
+   */
 
-  if (validCandidates.length === 0) {
-    return null;
-  }
-
-  let bestCandidate = validCandidates[0];
-
-  let bestDistance =
-    getManhattanDistance(previousTail, bestCandidate) +
-    getManhattanDistance(bestCandidate, currentTail);
-
-  for (let index = 1; index < validCandidates.length; index += 1) {
-    const candidate = validCandidates[index];
-
+  if (
+    previousBeforeTail &&
+    isOrthogonal(previousTail, previousBeforeTail) &&
+    isOrthogonal(previousBeforeTail, currentTail)
+  ) {
     const distance =
-      getManhattanDistance(previousTail, candidate) +
-      getManhattanDistance(candidate, currentTail);
+      getManhattanDistance(previousTail, previousBeforeTail) +
+      getManhattanDistance(previousBeforeTail, currentTail);
+
+    bestCandidate = previousBeforeTail;
+
+    bestDistance = distance;
+  }
+
+  if (
+    currentBeforeTail &&
+    isOrthogonal(previousTail, currentBeforeTail) &&
+    isOrthogonal(currentBeforeTail, currentTail)
+  ) {
+    const distance =
+      getManhattanDistance(previousTail, currentBeforeTail) +
+      getManhattanDistance(currentBeforeTail, currentTail);
 
     if (distance < bestDistance) {
-      bestDistance = distance;
-      bestCandidate = candidate;
+      bestCandidate = currentBeforeTail;
     }
+  }
+
+  if (!bestCandidate) {
+    return null;
   }
 
   return {
@@ -160,9 +183,7 @@ function getVisualTailState(snake, previousSnake, progress) {
   if (isOrthogonal(previousTail, currentTail)) {
     return {
       point: interpolatePoint(previousTail, currentTail, progress),
-
       corner: null,
-
       beforeCorner: false,
     };
   }
@@ -177,9 +198,7 @@ function getVisualTailState(snake, previousSnake, progress) {
   if (!corner) {
     return {
       point: interpolatePoint(previousTail, currentTail, progress),
-
       corner: null,
-
       beforeCorner: false,
     };
   }
@@ -193,11 +212,10 @@ function getVisualTailState(snake, previousSnake, progress) {
   if (totalLength <= EPSILON) {
     return {
       point: {
-        ...currentTail,
+        x: currentTail.x,
+        y: currentTail.y,
       },
-
       corner: null,
-
       beforeCorner: false,
     };
   }
@@ -209,9 +227,7 @@ function getVisualTailState(snake, previousSnake, progress) {
 
     return {
       point: interpolatePoint(previousTail, corner, localProgress),
-
       corner,
-
       beforeCorner: true,
     };
   }
@@ -219,11 +235,10 @@ function getVisualTailState(snake, previousSnake, progress) {
   if (secondLength <= EPSILON) {
     return {
       point: {
-        ...currentTail,
+        x: currentTail.x,
+        y: currentTail.y,
       },
-
       corner: null,
-
       beforeCorner: false,
     };
   }
@@ -234,29 +249,9 @@ function getVisualTailState(snake, previousSnake, progress) {
 
   return {
     point: interpolatePoint(corner, currentTail, localProgress),
-
     corner,
-
     beforeCorner: false,
   };
-}
-
-/* =========================================================
-   REMOÇÃO DE PONTOS DUPLICADOS
-   ========================================================= */
-
-function removeDuplicatePoints(points) {
-  const result = [];
-
-  points.forEach((point) => {
-    const lastPoint = result[result.length - 1];
-
-    if (!lastPoint || !isSamePoint(lastPoint, point)) {
-      result.push(point);
-    }
-  });
-
-  return result;
 }
 
 /* =========================================================
@@ -272,23 +267,68 @@ export function buildBodyPoints(snake, previousSnake, progress) {
 
   const visualHead = getVisualHead(snake, previousSnake, progress);
 
-  points.push(toCenter(visualHead));
+  /*
+   * Primeiro ponto:
+   * cabeça visual centralizada.
+   */
+
+  points.push({
+    x: visualHead.x + 0.5,
+    y: visualHead.y + 0.5,
+  });
+
+  /*
+   * Corpo lógico.
+   *
+   * Já removemos duplicatas enquanto
+   * construímos o array, evitando uma
+   * segunda passagem completa.
+   */
 
   for (let index = 1; index < snake.length; index += 1) {
-    points.push(toCenter(snake[index]));
+    const segment = snake[index];
+
+    const point = {
+      x: segment.x + 0.5,
+      y: segment.y + 0.5,
+    };
+
+    const previous = points[points.length - 1];
+
+    if (!previous || !isSamePoint(previous, point)) {
+      points.push(point);
+    }
   }
 
   if (snake.length > 1) {
     const tailState = getVisualTailState(snake, previousSnake, progress);
 
     if (tailState.corner && tailState.beforeCorner) {
-      points.push(toCenter(tailState.corner));
+      const cornerPoint = {
+        x: tailState.corner.x + 0.5,
+        y: tailState.corner.y + 0.5,
+      };
+
+      const previous = points[points.length - 1];
+
+      if (!previous || !isSamePoint(previous, cornerPoint)) {
+        points.push(cornerPoint);
+      }
     }
 
-    points.push(toCenter(tailState.point));
+    const tailPoint = {
+      x: tailState.point.x + 0.5,
+      y: tailState.point.y + 0.5,
+    };
+
+    const previous = points[points.length - 1];
+
+    if (!previous || !isSamePoint(previous, tailPoint)) {
+      points.push(tailPoint);
+    }
   }
 
-  return removeDuplicatePoints(points);
+  return points;
 }
 
 /* =========================================================
@@ -332,15 +372,29 @@ export function simplifyOrthogonalPoints(points) {
    ========================================================= */
 
 function getCornerGeometry(previous, current, next) {
-  const incomingLength = getDistance(previous, current);
+  /*
+   * Como os pontos são ortogonais,
+   * os comprimentos são simplesmente
+   * a diferença no eixo correspondente.
+   *
+   * Evitamos Math.hypot aqui.
+   */
 
-  const outgoingLength = getDistance(current, next);
+  const incomingLength =
+    Math.abs(current.x - previous.x) + Math.abs(current.y - previous.y);
+
+  const outgoingLength =
+    Math.abs(next.x - current.x) + Math.abs(next.y - current.y);
 
   const radius = Math.min(
     CORNER_RADIUS,
     incomingLength * 0.32,
     outgoingLength * 0.32,
   );
+
+  if (incomingLength <= EPSILON || outgoingLength <= EPSILON) {
+    return null;
+  }
 
   const incomingX = current.x - previous.x;
 
@@ -350,31 +404,28 @@ function getCornerGeometry(previous, current, next) {
 
   const outgoingY = next.y - current.y;
 
-  const incomingMagnitude = Math.hypot(incomingX, incomingY);
+  /*
+   * Os vetores são ortogonais.
+   *
+   * Portanto cada componente unitário
+   * é somente -1, 0 ou 1.
+   */
 
-  const outgoingMagnitude = Math.hypot(outgoingX, outgoingY);
+  const incomingUnitX = incomingX === 0 ? 0 : Math.sign(incomingX);
 
-  if (incomingMagnitude === 0 || outgoingMagnitude === 0) {
-    return null;
-  }
+  const incomingUnitY = incomingY === 0 ? 0 : Math.sign(incomingY);
 
-  const incomingUnit = {
-    x: incomingX / incomingMagnitude,
+  const outgoingUnitX = outgoingX === 0 ? 0 : Math.sign(outgoingX);
 
-    y: incomingY / incomingMagnitude,
-  };
-
-  const outgoingUnit = {
-    x: outgoingX / outgoingMagnitude,
-
-    y: outgoingY / outgoingMagnitude,
-  };
+  const outgoingUnitY = outgoingY === 0 ? 0 : Math.sign(outgoingY);
 
   return {
-    entry: {
-      x: current.x - incomingUnit.x * radius,
+    radius,
 
-      y: current.y - incomingUnit.y * radius,
+    entry: {
+      x: current.x - incomingUnitX * radius,
+
+      y: current.y - incomingUnitY * radius,
     },
 
     corner: {
@@ -383,9 +434,9 @@ function getCornerGeometry(previous, current, next) {
     },
 
     exit: {
-      x: current.x + outgoingUnit.x * radius,
+      x: current.x + outgoingUnitX * radius,
 
-      y: current.y + outgoingUnit.y * radius,
+      y: current.y + outgoingUnitY * radius,
     },
   };
 }
@@ -395,7 +446,12 @@ function getCornerGeometry(previous, current, next) {
    ========================================================= */
 
 function createLineSegment(start, end, startLength) {
-  const length = getDistance(start, end);
+  /*
+   * As linhas geradas aqui continuam
+   * ortogonais.
+   */
+
+  const length = Math.abs(end.x - start.x) + Math.abs(end.y - start.y);
 
   return {
     type: "line",
@@ -428,32 +484,35 @@ function getQuadraticPoint(start, control, end, progress) {
   };
 }
 
-function createQuadraticSegment(start, control, end, startLength) {
+function createQuadraticSegment(start, control, end, startLength, radius) {
+  /*
+   * Antes:
+   *
+   * - 8 chamadas de getQuadraticPoint()
+   * - 8 chamadas de Math.hypot()
+   * - reconstrução integral do
+   *   comprimento da curva
+   *
+   * para cada curva e a cada frame.
+   *
+   * Agora:
+   *
+   * o perfil normalizado já está
+   * pré-calculado e só é escalado
+   * pelo raio.
+   */
+
   const samples = new Array(QUADRATIC_LENGTH_STEPS + 1);
 
-  samples[0] = {
-    t: 0,
-    length: 0,
-  };
-
-  let previousPoint = start;
-
-  let accumulatedLength = 0;
-
-  for (let index = 1; index <= QUADRATIC_LENGTH_STEPS; index += 1) {
-    const t = index / QUADRATIC_LENGTH_STEPS;
-
-    const point = getQuadraticPoint(start, control, end, t);
-
-    accumulatedLength += getDistance(previousPoint, point);
-
+  for (let index = 0; index <= QUADRATIC_LENGTH_STEPS; index += 1) {
     samples[index] = {
-      t,
-      length: accumulatedLength,
-    };
+      t: index / QUADRATIC_LENGTH_STEPS,
 
-    previousPoint = point;
+      length: QUADRATIC_UNIT_SAMPLE_LENGTHS[index] * radius,
+    };
   }
+
+  const length = QUADRATIC_UNIT_LENGTH * radius;
 
   return {
     type: "quadratic",
@@ -466,11 +525,11 @@ function createQuadraticSegment(start, control, end, startLength) {
 
     samples,
 
-    length: accumulatedLength,
+    length,
 
     startLength,
 
-    endLength: startLength + accumulatedLength,
+    endLength: startLength + length,
   };
 }
 
@@ -501,12 +560,16 @@ export function buildRoundedPathGeometry(points) {
 
   let totalLength = 0;
 
+  let cursorX = points[0].x;
+
+  let cursorY = points[0].y;
+
   let cursor = {
-    x: points[0].x,
-    y: points[0].y,
+    x: cursorX,
+    y: cursorY,
   };
 
-  let pathData = `M ${cursor.x} ` + `${cursor.y}`;
+  let pathData = `M ${cursorX} ` + `${cursorY}`;
 
   function appendLine(target) {
     if (!isSamePoint(cursor, target)) {
@@ -519,18 +582,20 @@ export function buildRoundedPathGeometry(points) {
 
     pathData += ` L ${target.x} ` + `${target.y}`;
 
-    cursor = {
-      x: target.x,
-      y: target.y,
-    };
+    cursorX = target.x;
+
+    cursorY = target.y;
+
+    cursor = target;
   }
 
-  function appendQuadratic(control, target) {
+  function appendQuadratic(control, target, radius) {
     const segment = createQuadraticSegment(
       cursor,
       control,
       target,
       totalLength,
+      radius,
     );
 
     if (segment.length > EPSILON) {
@@ -540,12 +605,13 @@ export function buildRoundedPathGeometry(points) {
     }
 
     pathData +=
-      ` Q ${control.x} ` + `${control.y}` + ` ${target.x} ` + `${target.y}`;
+      ` Q ${control.x} ` + `${control.y} ` + `${target.x} ` + `${target.y}`;
 
-    cursor = {
-      x: target.x,
-      y: target.y,
-    };
+    cursorX = target.x;
+
+    cursorY = target.y;
+
+    cursor = target;
   }
 
   for (let index = 1; index < points.length - 1; index += 1) {
@@ -575,7 +641,7 @@ export function buildRoundedPathGeometry(points) {
 
     appendLine(geometry.entry);
 
-    appendQuadratic(geometry.corner, geometry.exit);
+    appendQuadratic(geometry.corner, geometry.exit, geometry.radius);
   }
 
   appendLine(points[points.length - 1]);
