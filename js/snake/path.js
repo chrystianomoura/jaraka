@@ -10,7 +10,8 @@
    - construção dos pontos do corpo;
    - simplificação de retas;
    - arredondamento das curvas;
-   - geração do path SVG.
+   - geração do path SVG;
+   - geometria amostrável sem consultas ao DOM.
 
    Este módulo não manipula DOM.
    ========================================================= */
@@ -18,6 +19,8 @@
 import { EPSILON } from "../game/config.js";
 
 const CORNER_RADIUS = 0.18;
+
+const QUADRATIC_LENGTH_STEPS = 8;
 
 /* =========================================================
    INTERPOLAÇÃO
@@ -30,7 +33,6 @@ function lerp(start, end, progress) {
 function interpolatePoint(start, end, progress) {
   return {
     x: lerp(start.x, end.x, progress),
-
     y: lerp(start.y, end.y, progress),
   };
 }
@@ -61,17 +63,12 @@ function isOrthogonal(first, second) {
 function toCenter(position) {
   return {
     x: position.x + 0.5,
-
     y: position.y + 0.5,
   };
 }
 
 function getDistance(first, second) {
-  return Math.hypot(
-    second.x - first.x,
-
-    second.y - first.y,
-  );
+  return Math.hypot(second.x - first.x, second.y - first.y);
 }
 
 function getManhattanDistance(first, second) {
@@ -89,7 +86,6 @@ export function getVisualHead(snake, previousSnake, progress) {
 
   return {
     x: lerp(previousHead.x, currentHead.x, progress),
-
     y: lerp(previousHead.y, currentHead.y, progress),
   };
 }
@@ -98,34 +94,7 @@ export function getVisualHead(snake, previousSnake, progress) {
    CAUDA — DETECÇÃO DE CURVA
    ========================================================= */
 
-/*
- * Durante crescimento visual gradual,
- * a extremidade pode atravessar uma curva
- * entre dois ticks.
- *
- * Exemplo:
- *
- * previousTail ---- corner
- *                       |
- *                       |
- *                  currentTail
- *
- * previousTail e currentTail possuem
- * X e Y diferentes.
- *
- * A interpolação linear comum produziria
- * uma diagonal.
- *
- * Precisamos descobrir o vértice real
- * por onde a cauda deve passar.
- */
-
 function findTailCorner(snake, previousSnake, previousTail, currentTail) {
-  /*
-   * Se continuam no mesmo eixo,
-   * não existe curva para atravessar.
-   */
-
   if (isOrthogonal(previousTail, currentTail)) {
     return null;
   }
@@ -144,12 +113,6 @@ function findTailCorner(snake, previousSnake, previousTail, currentTail) {
     candidates.push(currentBeforeTail);
   }
 
-  /*
-   * Procuramos um ponto que esteja
-   * ortogonalmente conectado tanto
-   * à posição anterior quanto à atual.
-   */
-
   const validCandidates = candidates.filter(
     (candidate) =>
       isOrthogonal(previousTail, candidate) &&
@@ -159,11 +122,6 @@ function findTailCorner(snake, previousSnake, previousTail, currentTail) {
   if (validCandidates.length === 0) {
     return null;
   }
-
-  /*
-   * Em caso de mais de um candidato,
-   * usamos a rota Manhattan mais curta.
-   */
 
   let bestCandidate = validCandidates[0];
 
@@ -180,14 +138,12 @@ function findTailCorner(snake, previousSnake, previousTail, currentTail) {
 
     if (distance < bestDistance) {
       bestDistance = distance;
-
       bestCandidate = candidate;
     }
   }
 
   return {
     x: bestCandidate.x,
-
     y: bestCandidate.y,
   };
 }
@@ -201,10 +157,6 @@ function getVisualTailState(snake, previousSnake, progress) {
 
   const previousTail = previousSnake[previousSnake.length - 1] ?? currentTail;
 
-  /*
-   * Movimento comum.
-   */
-
   if (isOrthogonal(previousTail, currentTail)) {
     return {
       point: interpolatePoint(previousTail, currentTail, progress),
@@ -215,25 +167,12 @@ function getVisualTailState(snake, previousSnake, progress) {
     };
   }
 
-  /*
-   * Movimento em que a ponta atravessa
-   * uma curva do corpo.
-   */
-
   const corner = findTailCorner(
     snake,
     previousSnake,
     previousTail,
     currentTail,
   );
-
-  /*
-   * Fallback defensivo.
-   *
-   * Se por algum estado inesperado
-   * não encontrarmos a curva, mantemos
-   * o comportamento tradicional.
-   */
 
   if (!corner) {
     return {
@@ -263,20 +202,7 @@ function getVisualTailState(snake, previousSnake, progress) {
     };
   }
 
-  /*
-   * Em vez de interpolar X e Y
-   * simultaneamente, transformamos
-   * progress em distância percorrida
-   * sobre a rota ortogonal.
-   */
-
   const traveledDistance = totalLength * progress;
-
-  /*
-   * PRIMEIRA PERNA:
-   *
-   * previousTail → corner
-   */
 
   if (traveledDistance <= firstLength && firstLength > EPSILON) {
     const localProgress = traveledDistance / firstLength;
@@ -286,22 +212,9 @@ function getVisualTailState(snake, previousSnake, progress) {
 
       corner,
 
-      /*
-       * Enquanto a ponta ainda não
-       * chegou ao vértice, buildBodyPoints
-       * precisa manter esse vértice
-       * explicitamente no path.
-       */
-
       beforeCorner: true,
     };
   }
-
-  /*
-   * SEGUNDA PERNA:
-   *
-   * corner → currentTail
-   */
 
   if (secondLength <= EPSILON) {
     return {
@@ -361,26 +274,12 @@ export function buildBodyPoints(snake, previousSnake, progress) {
 
   points.push(toCenter(visualHead));
 
-  /*
-   * Mantemos todos os pontos atuais
-   * do corpo exatamente como antes.
-   */
-
   for (let index = 1; index < snake.length; index += 1) {
     points.push(toCenter(snake[index]));
   }
 
   if (snake.length > 1) {
     const tailState = getVisualTailState(snake, previousSnake, progress);
-
-    /*
-     * Se a ponta ainda está na primeira
-     * metade de uma curva, o vértice
-     * precisa existir explicitamente.
-     *
-     * Isso impede o último trecho do SVG
-     * de cortar a curva diagonalmente.
-     */
 
     if (tailState.corner && tailState.beforeCorner) {
       points.push(toCenter(tailState.corner));
@@ -480,7 +379,6 @@ function getCornerGeometry(previous, current, next) {
 
     corner: {
       x: current.x,
-
       y: current.y,
     },
 
@@ -493,19 +391,162 @@ function getCornerGeometry(previous, current, next) {
 }
 
 /* =========================================================
-   CONSTRUÇÃO DO PATH SVG
+   SEGMENTOS MATEMÁTICOS DA CENTERLINE
    ========================================================= */
 
-export function buildRoundedPathData(points) {
+function createLineSegment(start, end, startLength) {
+  const length = getDistance(start, end);
+
+  return {
+    type: "line",
+
+    start,
+
+    end,
+
+    length,
+
+    startLength,
+
+    endLength: startLength + length,
+  };
+}
+
+function getQuadraticPoint(start, control, end, progress) {
+  const inverse = 1 - progress;
+
+  return {
+    x:
+      inverse * inverse * start.x +
+      2 * inverse * progress * control.x +
+      progress * progress * end.x,
+
+    y:
+      inverse * inverse * start.y +
+      2 * inverse * progress * control.y +
+      progress * progress * end.y,
+  };
+}
+
+function createQuadraticSegment(start, control, end, startLength) {
+  const samples = new Array(QUADRATIC_LENGTH_STEPS + 1);
+
+  samples[0] = {
+    t: 0,
+    length: 0,
+  };
+
+  let previousPoint = start;
+
+  let accumulatedLength = 0;
+
+  for (let index = 1; index <= QUADRATIC_LENGTH_STEPS; index += 1) {
+    const t = index / QUADRATIC_LENGTH_STEPS;
+
+    const point = getQuadraticPoint(start, control, end, t);
+
+    accumulatedLength += getDistance(previousPoint, point);
+
+    samples[index] = {
+      t,
+      length: accumulatedLength,
+    };
+
+    previousPoint = point;
+  }
+
+  return {
+    type: "quadratic",
+
+    start,
+
+    control,
+
+    end,
+
+    samples,
+
+    length: accumulatedLength,
+
+    startLength,
+
+    endLength: startLength + accumulatedLength,
+  };
+}
+
+/* =========================================================
+   GEOMETRIA COMPLETA DO PATH
+   ========================================================= */
+
+export function buildRoundedPathGeometry(points) {
   if (points.length === 0) {
-    return "";
+    return {
+      pathData: "",
+      segments: [],
+      totalLength: 0,
+    };
   }
 
   if (points.length === 1) {
-    return `M ${points[0].x} ` + `${points[0].y}`;
+    return {
+      pathData: `M ${points[0].x} ` + `${points[0].y}`,
+
+      segments: [],
+
+      totalLength: 0,
+    };
   }
 
-  let pathData = `M ${points[0].x} ` + `${points[0].y}`;
+  const segments = [];
+
+  let totalLength = 0;
+
+  let cursor = {
+    x: points[0].x,
+    y: points[0].y,
+  };
+
+  let pathData = `M ${cursor.x} ` + `${cursor.y}`;
+
+  function appendLine(target) {
+    if (!isSamePoint(cursor, target)) {
+      const segment = createLineSegment(cursor, target, totalLength);
+
+      segments.push(segment);
+
+      totalLength = segment.endLength;
+    }
+
+    pathData += ` L ${target.x} ` + `${target.y}`;
+
+    cursor = {
+      x: target.x,
+      y: target.y,
+    };
+  }
+
+  function appendQuadratic(control, target) {
+    const segment = createQuadraticSegment(
+      cursor,
+      control,
+      target,
+      totalLength,
+    );
+
+    if (segment.length > EPSILON) {
+      segments.push(segment);
+
+      totalLength = segment.endLength;
+    }
+
+    pathData +=
+      ` Q ${control.x} ` + `${control.y}` + ` ${target.x} ` + `${target.y}`;
+
+    cursor = {
+      x: target.x,
+      y: target.y,
+    };
+  }
 
   for (let index = 1; index < points.length - 1; index += 1) {
     const previous = points[index - 1];
@@ -519,7 +560,7 @@ export function buildRoundedPathData(points) {
     const outgoingHorizontal = Math.abs(current.y - next.y) < EPSILON;
 
     if (incomingHorizontal === outgoingHorizontal) {
-      pathData += ` L ${current.x} ` + `${current.y}`;
+      appendLine(current);
 
       continue;
     }
@@ -527,23 +568,116 @@ export function buildRoundedPathData(points) {
     const geometry = getCornerGeometry(previous, current, next);
 
     if (!geometry) {
-      pathData += ` L ${current.x} ` + `${current.y}`;
+      appendLine(current);
 
       continue;
     }
 
-    pathData += ` L ${geometry.entry.x} ` + `${geometry.entry.y}`;
+    appendLine(geometry.entry);
 
-    pathData +=
-      ` Q ${geometry.corner.x} ` +
-      `${geometry.corner.y}` +
-      ` ${geometry.exit.x} ` +
-      `${geometry.exit.y}`;
+    appendQuadratic(geometry.corner, geometry.exit);
   }
 
-  const lastPoint = points[points.length - 1];
+  appendLine(points[points.length - 1]);
 
-  pathData += ` L ${lastPoint.x} ` + `${lastPoint.y}`;
+  return {
+    pathData,
+    segments,
+    totalLength,
+  };
+}
 
-  return pathData;
+/* =========================================================
+   AMOSTRAGEM MATEMÁTICA
+   ========================================================= */
+
+function sampleQuadraticSegmentAtLength(segment, localLength) {
+  if (segment.length <= EPSILON) {
+    return {
+      x: segment.end.x,
+      y: segment.end.y,
+    };
+  }
+
+  const targetLength = Math.max(0, Math.min(localLength, segment.length));
+
+  const samples = segment.samples;
+
+  for (let index = 1; index < samples.length; index += 1) {
+    const current = samples[index];
+
+    if (targetLength > current.length) {
+      continue;
+    }
+
+    const previous = samples[index - 1];
+
+    const intervalLength = current.length - previous.length;
+
+    const intervalProgress =
+      intervalLength <= EPSILON
+        ? 0
+        : (targetLength - previous.length) / intervalLength;
+
+    const t = lerp(previous.t, current.t, intervalProgress);
+
+    return getQuadraticPoint(segment.start, segment.control, segment.end, t);
+  }
+
+  return {
+    x: segment.end.x,
+    y: segment.end.y,
+  };
+}
+
+export function sampleRoundedPathAtLength(pathGeometry, distance) {
+  const segments = pathGeometry?.segments ?? [];
+
+  if (segments.length === 0) {
+    return null;
+  }
+
+  const totalLength = pathGeometry.totalLength;
+
+  const targetLength = Math.max(0, Math.min(distance, totalLength));
+
+  for (let index = 0; index < segments.length; index += 1) {
+    const segment = segments[index];
+
+    if (targetLength > segment.endLength && index < segments.length - 1) {
+      continue;
+    }
+
+    const localLength = targetLength - segment.startLength;
+
+    if (segment.type === "quadratic") {
+      return sampleQuadraticSegmentAtLength(segment, localLength);
+    }
+
+    if (segment.length <= EPSILON) {
+      return {
+        x: segment.end.x,
+        y: segment.end.y,
+      };
+    }
+
+    const progress = Math.max(0, Math.min(localLength / segment.length, 1));
+
+    return interpolatePoint(segment.start, segment.end, progress);
+  }
+
+  const lastSegment = segments[segments.length - 1];
+
+  return {
+    x: lastSegment.end.x,
+    y: lastSegment.end.y,
+  };
+}
+
+/* =========================================================
+   CONSTRUÇÃO DO PATH SVG
+   ========================================================= */
+
+export function buildRoundedPathData(points) {
+  return buildRoundedPathGeometry(points).pathData;
 }
