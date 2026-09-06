@@ -4,10 +4,12 @@
    Renderer híbrido:
    - corpo principal em SVG;
    - região de taper em Canvas;
-   - matemática morfológica preservada;
-   - superfície preenchida, sem strokes segmentados;
+   - padrão corporal em Canvas;
+   - crescimento morfológico independente do tick;
+   - superfície preenchida;
    - amostragem proporcional global REMOVIDA;
-   - superfície ancorada na geometria real do path.
+   - superfície ancorada na geometria estrutural do path;
+   - curvas Canvas usam os samples estáveis do path.js.
    ========================================================= */
 
 import { GRID_SIZE } from "./game/config.js";
@@ -48,7 +50,7 @@ const SVG_NAMESPACE = "http://www.w3.org/2000/svg";
 const BODY_WIDTH = 0.92;
 
 /* =========================================================
-   MORFOLOGIA APROVADA
+   MORFOLOGIA
    ========================================================= */
 
 const TAIL_LENGTH_PER_GROWTH = 1;
@@ -58,6 +60,46 @@ const TAIL_WIDTH_LOSS_PER_GROWTH = 0.08;
 const MIN_TAIL_END_WIDTH = 0.28;
 
 const MIN_VISIBLE_GROWTH = 0.002;
+
+const BODY_TAIL_OVERLAP = 0.22;
+
+/* =========================================================
+   CRESCIMENTO MORFOLÓGICO
+   ========================================================= */
+
+const MORPHOLOGY_SMOOTHING_MS = 360;
+
+const MORPHOLOGY_FRAME_LIMIT_MS = 50;
+
+const MORPHOLOGY_SNAP_EPSILON = 0.001;
+
+/* =========================================================
+   PADRÃO CORPORAL
+   ========================================================= */
+
+const BODY_PATTERN_COLOR = "#168a3b";
+
+const BODY_PATTERN_START_DISTANCE = 1.7;
+
+const BODY_PATTERN_SPACING = 1.65;
+
+const BODY_PATTERN_GROWTH_INTERVAL = 1.35;
+
+const BODY_PATTERN_MAX_MARKS = 8;
+
+const BODY_PATTERN_TAIL_CLEARANCE = 0.5;
+
+const BODY_PATTERN_TANGENT_SAMPLE = 0.04;
+
+const BODY_PATTERN_SIDE_OFFSET = 0.17;
+
+const BODY_PATTERN_MAJOR_RADIUS = 0.19;
+
+const BODY_PATTERN_MINOR_RADIUS = 0.085;
+
+const BODY_PATTERN_SECONDARY_SCALE = 0.72;
+
+const BODY_PATTERN_MAX_ALPHA = 0.72;
 
 /* =========================================================
    GEOMETRIA
@@ -96,13 +138,19 @@ export function createSnakeRenderer({ layer }) {
 
   let canvasReady = false;
 
-  /*
-   * Buffers reutilizados.
-   *
-   * Os objetos de centerPoints também são
-   * reaproveitados entre frames para reduzir
-   * alocações temporárias e pressão sobre o GC.
-   */
+  /* =======================================================
+     MORFOLOGIA — ESTADO
+     ======================================================= */
+
+  let targetGrowth = 0;
+
+  let morphologyGrowth = 0;
+
+  let lastMorphologyTime = null;
+
+  /* =======================================================
+     BUFFERS
+     ======================================================= */
 
   const centerPoints = [];
 
@@ -256,6 +304,14 @@ export function createSnakeRenderer({ layer }) {
 
     initialSnakeLength = snake.length;
 
+    latestSnakeLength = snake.length;
+
+    targetGrowth = 0;
+
+    morphologyGrowth = 0;
+
+    lastMorphologyTime = null;
+
     bodyDashMode = null;
 
     centerPointCount = 0;
@@ -269,8 +325,6 @@ export function createSnakeRenderer({ layer }) {
     headElement = head.element;
 
     headCore = head.core;
-
-    latestSnakeLength = snake.length;
 
     updateSegmentShapes(snake, direction);
 
@@ -311,6 +365,32 @@ export function createSnakeRenderer({ layer }) {
   }
 
   /* =======================================================
+     BÉZIER QUADRÁTICA
+
+     Usa o mesmo parâmetro t que já é
+     calculado e armazenado pelo path.js.
+
+     Não existe nova distribuição global
+     de samples.
+     ======================================================= */
+
+  function getQuadraticPoint(start, control, end, progress) {
+    const inverse = 1 - progress;
+
+    return {
+      x:
+        inverse * inverse * start.x +
+        2 * inverse * progress * control.x +
+        progress * progress * end.x,
+
+      y:
+        inverse * inverse * start.y +
+        2 * inverse * progress * control.y +
+        progress * progress * end.y,
+    };
+  }
+
+  /* =======================================================
      SVG — VISIBILIDADE
      ======================================================= */
 
@@ -327,27 +407,62 @@ export function createSnakeRenderer({ layer }) {
   }
 
   function setBodyVisibleLength(visibleLength, totalLength) {
+    const overlappedVisibleLength = Math.min(
+      totalLength,
+      visibleLength + BODY_TAIL_OVERLAP,
+    );
+
     const hiddenLength = totalLength + 2;
 
     bodyDashMode = "tail";
 
-    bodyPath.style.strokeDasharray = `${visibleLength} ${hiddenLength}`;
+    bodyPath.style.strokeDasharray = `${overlappedVisibleLength} ${hiddenLength}`;
   }
 
   /* =======================================================
-     CRESCIMENTO VISUAL
+     CRESCIMENTO
      ======================================================= */
 
   function getGrowthAmount(snakeLength) {
     return Math.max(0, snakeLength - initialSnakeLength);
   }
 
-  function getVisualGrowthAmount(snake, previousSnake, progress) {
-    const previousGrowth = getGrowthAmount(previousSnake.length);
+  /* =======================================================
+     CRESCIMENTO MORFOLÓGICO
+     ======================================================= */
 
-    const currentGrowth = getGrowthAmount(snake.length);
+  function updateMorphologyGrowth(snakeLength) {
+    targetGrowth = getGrowthAmount(snakeLength);
 
-    return lerp(previousGrowth, currentGrowth, progress);
+    const now = performance.now();
+
+    if (lastMorphologyTime === null) {
+      lastMorphologyTime = now;
+
+      morphologyGrowth = targetGrowth;
+
+      return morphologyGrowth;
+    }
+
+    let deltaTime = now - lastMorphologyTime;
+
+    lastMorphologyTime = now;
+
+    deltaTime = Math.min(Math.max(deltaTime, 0), MORPHOLOGY_FRAME_LIMIT_MS);
+
+    const difference = targetGrowth - morphologyGrowth;
+
+    if (Math.abs(difference) <= MORPHOLOGY_SNAP_EPSILON) {
+      morphologyGrowth = targetGrowth;
+
+      return morphologyGrowth;
+    }
+
+    const smoothing = 1 - Math.exp(-deltaTime / MORPHOLOGY_SMOOTHING_MS);
+
+    morphologyGrowth += difference * smoothing;
+
+    return morphologyGrowth;
   }
 
   /* =======================================================
@@ -425,6 +540,10 @@ export function createSnakeRenderer({ layer }) {
       return 0;
     }
 
+    /*
+     * Único corte realmente dinâmico.
+     */
+
     const startPoint = sampleRoundedPathAtLength(pathGeometry, tailStart);
 
     pushCenterPoint(startPoint, tailStart);
@@ -440,14 +559,45 @@ export function createSnakeRenderer({ layer }) {
         continue;
       }
 
+      /* ===================================================
+         RETA
+         =================================================== */
+
       if (segment.type === "line") {
         pushCenterPoint(segment.end, segment.endLength);
 
         continue;
       }
 
+      /* ===================================================
+         CURVA QUADRÁTICA
+         =================================================== */
+
       if (segment.type === "quadratic") {
         const samples = segment.samples ?? [];
+
+        /*
+         * IMPORTANTE:
+         *
+         * path.js armazena t + comprimento.
+         *
+         * Ele NÃO armazena sample.point.
+         *
+         * Antes tentávamos acessar:
+         *
+         * sample.point
+         *
+         * Como era undefined, pushCenterPoint()
+         * simplesmente ignorava o sample.
+         *
+         * Resultado:
+         * a curva inteira era praticamente
+         * reduzida ao endpoint.
+         *
+         * Agora calculamos o ponto real da
+         * mesma Bézier usando o t estrutural
+         * já fornecido pelo path.js.
+         */
 
         for (
           let sampleIndex = 1;
@@ -462,8 +612,23 @@ export function createSnakeRenderer({ layer }) {
             continue;
           }
 
-          pushCenterPoint(sample.point, globalDistance);
+          const point = getQuadraticPoint(
+            segment.start,
+            segment.control,
+            segment.end,
+            sample.t,
+          );
+
+          pushCenterPoint(point, globalDistance);
         }
+
+        /*
+         * O último sample normalmente já
+         * coincide com segment.end.
+         *
+         * pushCenterPoint remove a duplicata
+         * sem gerar outro nó.
+         */
 
         pushCenterPoint(segment.end, segment.endLength);
       }
@@ -499,6 +664,13 @@ export function createSnakeRenderer({ layer }) {
 
       let width =
         index === 0 ? BODY_WIDTH : getTailWidth(progress, visualGrowth);
+
+      /*
+       * Invariante fundamental:
+       *
+       * depois que começa o taper,
+       * a largura jamais aumenta.
+       */
 
       width = Math.min(previousWidth, width);
 
@@ -591,7 +763,7 @@ export function createSnakeRenderer({ layer }) {
   }
 
   /* =======================================================
-     SUPERFÍCIE — CURVAS
+     SUPERFÍCIE — JUNÇÕES
      ======================================================= */
 
   function fillCurveJoints() {
@@ -682,8 +854,6 @@ export function createSnakeRenderer({ layer }) {
       return;
     }
 
-    tailContext.clearRect(0, 0, GRID_SIZE, GRID_SIZE);
-
     if (centerPointCount < 2) {
       return;
     }
@@ -701,17 +871,13 @@ export function createSnakeRenderer({ layer }) {
      CAUDA
      ======================================================= */
 
-  function renderTail(snake, previousSnake, progress, pathGeometry) {
+  function renderTail(visualGrowth, pathGeometry) {
     if (!bodyPath || !tailCanvas || !tailContext) {
       return;
     }
 
-    const visualGrowth = getVisualGrowthAmount(snake, previousSnake, progress);
-
     if (visualGrowth <= MIN_VISIBLE_GROWTH) {
       resetBodyDash();
-
-      clearTailCanvas();
 
       return;
     }
@@ -721,8 +887,6 @@ export function createSnakeRenderer({ layer }) {
     if (!Number.isFinite(totalLength) || totalLength <= 0) {
       resetBodyDash();
 
-      clearTailCanvas();
-
       return;
     }
 
@@ -730,8 +894,6 @@ export function createSnakeRenderer({ layer }) {
 
     if (!Number.isFinite(tailLength) || tailLength <= 0) {
       resetBodyDash();
-
-      clearTailCanvas();
 
       return;
     }
@@ -743,14 +905,196 @@ export function createSnakeRenderer({ layer }) {
     const pointCount = buildStructuralTailPoints(pathGeometry, tailStart);
 
     if (pointCount < 2) {
-      clearTailCanvas();
-
       return;
     }
 
     prepareTailGeometry(tailStart, tailLength, visualGrowth);
 
     drawTailSurface();
+  }
+
+  /* =======================================================
+     PADRÃO — OPACIDADE
+     ======================================================= */
+
+  function getPatternMarkOpacity(markIndex, visualGrowth) {
+    const appearanceGrowth = (markIndex + 1) * BODY_PATTERN_GROWTH_INTERVAL;
+
+    const progress = clamp(visualGrowth - appearanceGrowth + 1, 0, 1);
+
+    const eased = progress * progress * (3 - 2 * progress);
+
+    return eased * BODY_PATTERN_MAX_ALPHA;
+  }
+
+  /* =======================================================
+     PADRÃO — MANCHA
+     ======================================================= */
+
+  function drawPatternEllipse(x, y, angle, radiusX, radiusY, alpha) {
+    tailContext.save();
+
+    tailContext.translate(x, y);
+
+    tailContext.rotate(angle);
+
+    tailContext.globalAlpha = alpha;
+
+    tailContext.beginPath();
+
+    tailContext.ellipse(0, 0, radiusX, radiusY, 0, 0, Math.PI * 2);
+
+    tailContext.fill();
+
+    tailContext.restore();
+  }
+
+  /* =======================================================
+     PADRÃO — CORPO
+     ======================================================= */
+
+  function renderBodyPattern(pathGeometry, visualGrowth) {
+    if (!tailContext || !canvasReady || visualGrowth <= MIN_VISIBLE_GROWTH) {
+      return;
+    }
+
+    const totalLength = pathGeometry?.totalLength ?? 0;
+
+    if (!Number.isFinite(totalLength) || totalLength <= 0) {
+      return;
+    }
+
+    const tailLength = getTailLength(totalLength, visualGrowth);
+
+    const tailStart = Math.max(0, totalLength - tailLength);
+
+    const patternEnd = Math.max(0, tailStart - BODY_PATTERN_TAIL_CLEARANCE);
+
+    if (patternEnd <= BODY_PATTERN_START_DISTANCE) {
+      return;
+    }
+
+    const visibleMarkCount = Math.min(
+      BODY_PATTERN_MAX_MARKS,
+      Math.ceil(visualGrowth / BODY_PATTERN_GROWTH_INTERVAL),
+    );
+
+    if (visibleMarkCount <= 0) {
+      return;
+    }
+
+    tailContext.fillStyle = BODY_PATTERN_COLOR;
+
+    for (let markIndex = 0; markIndex < visibleMarkCount; markIndex += 1) {
+      const distance =
+        BODY_PATTERN_START_DISTANCE + markIndex * BODY_PATTERN_SPACING;
+
+      if (distance >= patternEnd) {
+        break;
+      }
+
+      const point = sampleRoundedPathAtLength(pathGeometry, distance);
+
+      if (!point) {
+        continue;
+      }
+
+      const tangentDistance = Math.min(
+        patternEnd,
+        distance + BODY_PATTERN_TANGENT_SAMPLE,
+      );
+
+      const tangentPoint = sampleRoundedPathAtLength(
+        pathGeometry,
+        tangentDistance,
+      );
+
+      if (!tangentPoint) {
+        continue;
+      }
+
+      let directionX = tangentPoint.x - point.x;
+
+      let directionY = tangentPoint.y - point.y;
+
+      let directionLength = Math.hypot(directionX, directionY);
+
+      if (directionLength <= MIN_VECTOR_LENGTH) {
+        const previousDistance = Math.max(
+          0,
+          distance - BODY_PATTERN_TANGENT_SAMPLE,
+        );
+
+        const previousPoint = sampleRoundedPathAtLength(
+          pathGeometry,
+          previousDistance,
+        );
+
+        if (!previousPoint) {
+          continue;
+        }
+
+        directionX = point.x - previousPoint.x;
+
+        directionY = point.y - previousPoint.y;
+
+        directionLength = Math.hypot(directionX, directionY);
+      }
+
+      if (directionLength <= MIN_VECTOR_LENGTH) {
+        continue;
+      }
+
+      const inverseLength = 1 / directionLength;
+
+      directionX *= inverseLength;
+
+      directionY *= inverseLength;
+
+      const normalX = -directionY;
+
+      const normalY = directionX;
+
+      const angle = Math.atan2(directionY, directionX);
+
+      const side = markIndex % 2 === 0 ? 1 : -1;
+
+      const alpha = getPatternMarkOpacity(markIndex, visualGrowth);
+
+      if (alpha <= 0) {
+        continue;
+      }
+
+      const primaryX = point.x + normalX * BODY_PATTERN_SIDE_OFFSET * side;
+
+      const primaryY = point.y + normalY * BODY_PATTERN_SIDE_OFFSET * side;
+
+      drawPatternEllipse(
+        primaryX,
+        primaryY,
+        angle,
+        BODY_PATTERN_MAJOR_RADIUS,
+        BODY_PATTERN_MINOR_RADIUS,
+        alpha,
+      );
+
+      const secondaryX =
+        point.x - normalX * BODY_PATTERN_SIDE_OFFSET * 0.78 * side;
+
+      const secondaryY =
+        point.y - normalY * BODY_PATTERN_SIDE_OFFSET * 0.78 * side;
+
+      drawPatternEllipse(
+        secondaryX,
+        secondaryY,
+        angle,
+        BODY_PATTERN_MAJOR_RADIUS * BODY_PATTERN_SECONDARY_SCALE,
+        BODY_PATTERN_MINOR_RADIUS * BODY_PATTERN_SECONDARY_SCALE,
+        alpha * 0.82,
+      );
+    }
+
+    tailContext.globalAlpha = 1;
   }
 
   /* =======================================================
@@ -776,16 +1120,15 @@ export function createSnakeRenderer({ layer }) {
 
     const pathGeometry = buildRoundedPathGeometry(points);
 
-    /*
-     * O SVG mantém apenas o path visível
-     * do corpo. As antigas camadas auxiliares
-     * foram removidas para reduzir trabalho
-     * de estilo, pintura e composição.
-     */
-
     bodyPath.setAttribute("d", pathGeometry.pathData);
 
-    renderTail(snake, previousSnake, progress, pathGeometry);
+    clearTailCanvas();
+
+    const visualGrowth = updateMorphologyGrowth(snake.length);
+
+    renderTail(visualGrowth, pathGeometry);
+
+    renderBodyPattern(pathGeometry, visualGrowth);
   }
 
   /* =======================================================
