@@ -144,19 +144,14 @@ body {
 
   color: var(--color-interface);
 
-  background:
-    radial-gradient(
-      ellipse at 50% 4%,
-      rgba(37, 69, 153, 0.18) 0%,
-      rgba(14, 27, 72, 0.08) 28%,
-      transparent 48%
-    ),
-    radial-gradient(
-      ellipse at 50% 58%,
-      rgba(14, 40, 100, 0.05) 0%,
-      transparent 60%
-    ),
-    var(--color-background);
+  /*
+   * O ambiente externo permanece completamente limpo.
+   *
+   * Toda iluminação/neon pertence exclusivamente
+   * à arena.
+   */
+
+  background: var(--color-background);
 
   font-family: "Orbitron", system-ui, sans-serif;
 
@@ -254,10 +249,6 @@ body {
   white-space: nowrap;
 
   color: var(--color-interface);
-
-  text-shadow:
-    0 0 8px rgba(255, 255, 255, 0.17),
-    0 0 22px rgba(147, 128, 255, 0.13);
 }
 
 /* =========================================================
@@ -299,7 +290,7 @@ body {
 }
 
 /* =========================================================
-   SCORE — BLOCO À ESQUERDA
+   SCORE
    ========================================================= */
 
 .game-stat:first-child {
@@ -307,7 +298,7 @@ body {
 }
 
 /* =========================================================
-   MODE — EIXO CENTRAL REAL
+   MODE
    ========================================================= */
 
 .game-mode {
@@ -315,7 +306,7 @@ body {
 }
 
 /* =========================================================
-   HIGH SCORE — BLOCO À DIREITA
+   HIGH SCORE
    ========================================================= */
 
 .game-stat--high-score {
@@ -343,8 +334,6 @@ body {
   white-space: nowrap;
 
   color: var(--color-blue-bright);
-
-  text-shadow: 0 0 7px rgba(77, 141, 255, 0.16);
 }
 
 /* =========================================================
@@ -368,8 +357,6 @@ body {
   white-space: nowrap;
 
   color: var(--color-interface);
-
-  text-shadow: 0 0 7px rgba(255, 255, 255, 0.11);
 }
 
 /* =========================================================

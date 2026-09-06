@@ -1,6 +1,15 @@
 /* =========================================================
    JARAKA — BOARD
    Arena principal
+
+   Direção visual:
+   - superfície tecnológica profunda;
+   - sem grid ou células visíveis;
+   - microtextura procedural;
+   - iluminação atmosférica distribuída;
+   - centro preservado para gameplay;
+   - profundidade nas extremidades;
+   - moldura neon independente.
    ========================================================= */
 
 /* =========================================================
@@ -21,13 +30,8 @@
   flex: 0 0 auto;
 
   /*
-   * IMPORTANTE:
-   *
-   * O board externo continua permitindo overflow,
-   * porque a moldura neon vive fora da arena.
-   *
-   * O clipping dos atores acontece dentro de
-   * .game-board__viewport.
+   * A moldura existe fora da arena.
+   * O clipping pertence somente à viewport interna.
    */
 
   overflow: visible;
@@ -47,51 +51,100 @@
   width: 100%;
   height: 100%;
 
-  /*
-   * Este é o limite físico real da arena.
-   *
-   * Jaraka, rato, canvas e SVG não podem aparecer
-   * além deste retângulo.
-   */
-
   overflow: hidden;
 
-  background-color: var(--color-board);
+  /*
+   * SUPERFÍCIE BASE
+   *
+   * A iluminação não possui mais um único foco evidente.
+   * Existem zonas amplas e fracas distribuídas pela arena.
+   */
 
-  background-image:
-    linear-gradient(to right, var(--color-grid) 1px, transparent 1px),
-    linear-gradient(to bottom, var(--color-grid) 1px, transparent 1px),
+  background:
     radial-gradient(
-      circle at 0 0,
-      rgba(76, 142, 255, 0.72) 1px,
-      transparent 1.35px
+      ellipse 92% 32% at 50% -7%,
+      rgba(66, 128, 255, 0.085) 0%,
+      rgba(40, 89, 198, 0.038) 38%,
+      transparent 74%
     ),
     radial-gradient(
-      circle at 50% 44%,
-      rgba(34, 83, 183, 0.08) 0%,
+      ellipse 72% 30% at 18% 35%,
+      rgba(31, 78, 179, 0.025) 0%,
+      transparent 72%
+    ),
+    radial-gradient(
+      ellipse 74% 34% at 86% 61%,
+      rgba(37, 87, 194, 0.026) 0%,
+      transparent 74%
+    ),
+    radial-gradient(
+      ellipse 96% 32% at 50% 105%,
+      rgba(24, 65, 158, 0.045) 0%,
       transparent 70%
     ),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.012) 0%, transparent 20%);
-
-  background-size:
-    var(--cell-size) var(--cell-size),
-    var(--cell-size) var(--cell-size),
-    var(--cell-size) var(--cell-size),
-    100% 100%,
-    100% 100%;
-
-  background-position:
-    0 0,
-    0 0,
-    0 0,
-    center,
-    center;
+    linear-gradient(
+      180deg,
+      #061027 0%,
+      #050d21 20%,
+      #040b1d 47%,
+      #040a1b 72%,
+      #030817 100%
+    );
 
   z-index: 1;
 }
 
 /* =========================================================
-   BORDA INTERNA
+   MICROTEXTURA
+   ========================================================= */
+
+.game-board__viewport::before {
+  content: "";
+
+  position: absolute;
+
+  inset: 0;
+
+  /*
+   * Duas tramas diagonais extremamente finas formam
+   * uma microestrutura irregular quando sobrepostas.
+   *
+   * Não representam células, caminhos ou coordenadas.
+   * Servem apenas para impedir que grandes áreas escuras
+   * pareçam uma cor chapada.
+   */
+
+  background-image:
+    repeating-linear-gradient(
+      117deg,
+      rgba(119, 177, 255, 0.011) 0,
+      rgba(119, 177, 255, 0.011) 1px,
+      transparent 1px,
+      transparent 7px
+    ),
+    repeating-linear-gradient(
+      27deg,
+      rgba(89, 145, 236, 0.007) 0,
+      rgba(89, 145, 236, 0.007) 1px,
+      transparent 1px,
+      transparent 11px
+    ),
+    radial-gradient(
+      ellipse 62% 42% at 50% 46%,
+      rgba(76, 128, 229, 0.022) 0%,
+      rgba(33, 74, 163, 0.009) 45%,
+      transparent 76%
+    );
+
+  opacity: 0.82;
+
+  pointer-events: none;
+
+  z-index: 0;
+}
+
+/* =========================================================
+   PROFUNDIDADE
    ========================================================= */
 
 .game-board__viewport::after {
@@ -101,11 +154,39 @@
 
   inset: 0;
 
-  border: 1px solid rgba(85, 132, 255, 0.18);
+  border: 0;
+
+  /*
+   * VINHETA INTERNA
+   *
+   * As laterais e extremidades perdem luminância
+   * gradualmente, fazendo o plano central parecer
+   * ligeiramente mais profundo.
+   *
+   * Nenhuma linha delimita a área jogável.
+   */
+
+  background:
+    linear-gradient(
+      90deg,
+      rgba(0, 3, 13, 0.14) 0%,
+      rgba(0, 3, 13, 0.035) 8%,
+      transparent 20%,
+      transparent 80%,
+      rgba(0, 3, 13, 0.035) 92%,
+      rgba(0, 3, 13, 0.14) 100%
+    ),
+    linear-gradient(
+      180deg,
+      rgba(0, 3, 13, 0.07) 0%,
+      transparent 10%,
+      transparent 84%,
+      rgba(0, 3, 13, 0.15) 100%
+    );
 
   box-shadow:
-    inset 0 0 0 1px rgba(0, 0, 0, 0.28),
-    inset 0 0 26px rgba(0, 0, 0, 0.18);
+    inset 0 0 34px rgba(0, 2, 12, 0.18),
+    inset 0 0 70px rgba(0, 3, 16, 0.08);
 
   pointer-events: none;
 
@@ -127,11 +208,20 @@
 
   border-radius: 10px;
 
+  /*
+   * A moldura é o único limite luminoso explícito.
+   *
+   * Glow próximo mais intenso.
+   * Glow distante muito mais difuso.
+   */
+
   box-shadow:
-    0 0 0 1px rgba(79, 141, 255, 0.18),
-    0 0 8px rgba(79, 141, 255, 0.42),
-    0 0 18px rgba(79, 141, 255, 0.16),
-    inset 0 0 0 1px rgba(155, 195, 255, 0.3);
+    0 0 0 1px rgba(92, 151, 255, 0.16),
+    0 0 4px rgba(91, 154, 255, 0.54),
+    0 0 10px rgba(67, 137, 255, 0.3),
+    0 0 22px rgba(49, 113, 246, 0.12),
+    0 0 38px rgba(42, 98, 222, 0.045),
+    inset 0 0 0 1px rgba(177, 210, 255, 0.32);
 
   pointer-events: none;
 
@@ -174,6 +264,7 @@
 .game-board,
 .game-board::after,
 .game-board__viewport,
+.game-board__viewport::before,
 .game-board__viewport::after {
   box-sizing: border-box;
 }
@@ -187,10 +278,11 @@
     border-radius: 9px;
 
     box-shadow:
-      0 0 0 1px rgba(79, 141, 255, 0.16),
-      0 0 6px rgba(79, 141, 255, 0.36),
-      0 0 14px rgba(79, 141, 255, 0.12),
-      inset 0 0 0 1px rgba(155, 195, 255, 0.26);
+      0 0 0 1px rgba(92, 151, 255, 0.14),
+      0 0 4px rgba(91, 154, 255, 0.48),
+      0 0 9px rgba(67, 137, 255, 0.26),
+      0 0 18px rgba(49, 113, 246, 0.1),
+      inset 0 0 0 1px rgba(177, 210, 255, 0.28);
   }
 }
 
@@ -199,10 +291,16 @@
    ========================================================= */
 
 @media (max-height: 560px) {
+  .game-board__viewport::before {
+    opacity: 0.7;
+  }
+
   .game-board::after {
     box-shadow:
-      0 0 0 1px rgba(79, 141, 255, 0.14),
-      0 0 6px rgba(79, 141, 255, 0.3),
-      inset 0 0 0 1px rgba(155, 195, 255, 0.22);
+      0 0 0 1px rgba(92, 151, 255, 0.13),
+      0 0 4px rgba(91, 154, 255, 0.42),
+      0 0 8px rgba(67, 137, 255, 0.22),
+      0 0 16px rgba(49, 113, 246, 0.08),
+      inset 0 0 0 1px rgba(177, 210, 255, 0.25);
   }
 }
