@@ -10,7 +10,7 @@
    Este módulo não altera estado do jogo.
    ========================================================= */
 
-import { GRID_SIZE } from "./config.js";
+import { GRID_COLUMNS, GRID_ROWS } from "./config.js";
 
 /* =========================================================
    POSIÇÕES
@@ -27,9 +27,9 @@ export function isSamePosition(first, second) {
 export function willHitWall(position) {
   return (
     position.x < 0 ||
-    position.x >= GRID_SIZE ||
+    position.x >= GRID_COLUMNS ||
     position.y < 0 ||
-    position.y >= GRID_SIZE
+    position.y >= GRID_ROWS
   );
 }
 

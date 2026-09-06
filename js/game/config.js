@@ -9,7 +9,9 @@
    - tolerância para cálculos numéricos.
    ========================================================= */
 
-export const GRID_SIZE = 16;
+export const GRID_COLUMNS = 12;
+
+export const GRID_ROWS = 22;
 
 export const MOVE_INTERVAL = 180;
 

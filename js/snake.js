@@ -11,7 +11,7 @@
    - curvas usam os samples estruturais estáveis do path.js.
    ========================================================= */
 
-import { GRID_SIZE } from "./game/config.js";
+import { GRID_COLUMNS, GRID_ROWS } from "./game/config.js";
 
 import {
   getVisualHead,
@@ -172,7 +172,7 @@ export function createSnakeRenderer({ layer }) {
 
     svg.classList.add("snake-body-svg");
 
-    svg.setAttribute("viewBox", `0 0 ${GRID_SIZE} ${GRID_SIZE}`);
+    svg.setAttribute("viewBox", `0 0 ${GRID_COLUMNS} ${GRID_ROWS}`);
 
     svg.setAttribute("preserveAspectRatio", "none");
 
@@ -241,10 +241,10 @@ export function createSnakeRenderer({ layer }) {
     }
 
     bodyContext.setTransform(
-      pixelWidth / GRID_SIZE,
+      pixelWidth / GRID_COLUMNS,
       0,
       0,
-      pixelHeight / GRID_SIZE,
+      pixelHeight / GRID_ROWS,
       0,
       0,
     );
@@ -285,7 +285,7 @@ export function createSnakeRenderer({ layer }) {
       return;
     }
 
-    bodyContext.clearRect(0, 0, GRID_SIZE, GRID_SIZE);
+    bodyContext.clearRect(0, 0, GRID_COLUMNS, GRID_ROWS);
   }
 
   /* =======================================================

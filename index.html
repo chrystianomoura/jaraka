@@ -2,7 +2,9 @@
 <html lang="pt-BR">
   <head>
     <meta charset="UTF-8" />
+
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
     <meta name="theme-color" content="#050817" />
 
     <title>JARAKA</title>
@@ -12,38 +14,72 @@
 
   <body>
     <main class="game-shell">
-      <section class="game-board" aria-label="Tabuleiro da JARAKA">
-        <div
-          class="mouse-food is-angry"
-          style="--mouse-x: 17; --mouse-y: 8"
-          aria-label="Ratinho"
-        >
-          <div class="mouse-actor">
-            <div class="mouse-core">
-              <span class="mouse-ear mouse-ear--left"></span>
-              <span class="mouse-ear mouse-ear--right"></span>
+      <section class="game-stage" aria-label="JARAKA">
+        <header class="game-hud">
+          <div class="game-identity">
+            <h1 class="game-title">JARAKA</h1>
 
-              <div class="mouse-face">
-                <span class="mouse-brow mouse-brow--left"></span>
-                <span class="mouse-brow mouse-brow--right"></span>
+            <p class="game-mode">
+              <span class="game-mode__label"> MODE </span>
 
-                <span class="mouse-eye mouse-eye--left"></span>
-                <span class="mouse-eye mouse-eye--right"></span>
+              <span class="game-mode__separator" aria-hidden="true"> · </span>
 
-                <span class="mouse-nose"></span>
-                <span class="mouse-mouth"></span>
+              <strong class="game-mode__value" id="game-mode"> WALL </strong>
+            </p>
+          </div>
 
-                <span class="mouse-whisker mouse-whisker--left-top"></span>
-                <span class="mouse-whisker mouse-whisker--left-bottom"></span>
+          <div class="game-stats" aria-label="Pontuação da partida">
+            <div class="game-stat">
+              <span class="game-stat__label"> SCORE </span>
 
-                <span class="mouse-whisker mouse-whisker--right-top"></span>
-                <span class="mouse-whisker mouse-whisker--right-bottom"></span>
+              <strong class="game-stat__value" id="score"> 000000 </strong>
+            </div>
+
+            <div class="game-stat game-stat--high-score">
+              <span class="game-stat__label"> HIGH SCORE </span>
+
+              <strong class="game-stat__value" id="high-score"> 000000 </strong>
+            </div>
+          </div>
+        </header>
+
+        <section class="game-board" aria-label="Tabuleiro da JARAKA">
+          <div class="mouse-food is-angry" aria-label="Ratinho">
+            <div class="mouse-actor">
+              <div class="mouse-core">
+                <span class="mouse-ear mouse-ear--left"></span>
+
+                <span class="mouse-ear mouse-ear--right"></span>
+
+                <div class="mouse-face">
+                  <span class="mouse-brow mouse-brow--left"></span>
+
+                  <span class="mouse-brow mouse-brow--right"></span>
+
+                  <span class="mouse-eye mouse-eye--left"></span>
+
+                  <span class="mouse-eye mouse-eye--right"></span>
+
+                  <span class="mouse-nose"></span>
+
+                  <span class="mouse-mouth"></span>
+
+                  <span class="mouse-whisker mouse-whisker--left-top"></span>
+
+                  <span class="mouse-whisker mouse-whisker--left-bottom"></span>
+
+                  <span class="mouse-whisker mouse-whisker--right-top"></span>
+
+                  <span
+                    class="mouse-whisker mouse-whisker--right-bottom"
+                  ></span>
+                </div>
               </div>
             </div>
           </div>
-        </div>
 
-        <div class="snake-layer" aria-label="Verdyka"></div>
+          <div class="snake-layer" aria-label="Verdyka"></div>
+        </section>
       </section>
     </main>
 

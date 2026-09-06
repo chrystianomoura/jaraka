@@ -1,11 +1,23 @@
 /* =========================================================
    JARAKA — MOUSE
    Estado visual e reação do rato à proximidade da cobra
+
+   Responsabilidades:
+   - calcular a distância entre rato e cabeça da Jaraka;
+   - controlar as expressões visuais do rato;
+   - reagir à aproximação da Jaraka.
+
+   A posição lógica do rato é recebida como referência
+   compartilhada com o foodController.
    ========================================================= */
 
 const MOUSE_SCARED_DISTANCE = 3;
 
 const EXPRESSION_CLASSES = ["is-normal", "is-angry", "is-scared", "is-happy"];
+
+/* =========================================================
+   CONTROLLER
+   ========================================================= */
 
 export function createMouseController({ element, position }) {
   /* =======================================================

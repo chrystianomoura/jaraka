@@ -37,12 +37,12 @@ const mouseActor = mouseFood?.querySelector(".mouse-actor");
    ========================================================= */
 
 const initialSnake = [
-  { x: 9, y: 8 },
-  { x: 8, y: 8 },
-  { x: 7, y: 8 },
-  { x: 6, y: 8 },
-  { x: 5, y: 8 },
-  { x: 4, y: 8 },
+  { x: 9, y: 11 },
+  { x: 8, y: 11 },
+  { x: 7, y: 11 },
+  { x: 6, y: 11 },
+  { x: 5, y: 11 },
+  { x: 4, y: 11 },
 ];
 
 /* =========================================================
@@ -54,17 +54,33 @@ const gameState = createGameState({
 });
 
 /* =========================================================
+   POSIÇÃO COMPARTILHADA DO RATO
+   ========================================================= */
+
+/*
+ * Este é o único objeto de posição do rato.
+ *
+ * Ele é compartilhado entre:
+ * - mouseController;
+ * - foodController.
+ *
+ * O foodController altera x e y,
+ * enquanto o mouseController lê
+ * esses mesmos valores.
+ */
+
+const mousePosition = {
+  x: 0,
+  y: 0,
+};
+
+/* =========================================================
    CONTROLLERS PRINCIPAIS
    ========================================================= */
 
 const snakeRenderer = createSnakeRenderer({
   layer: snakeLayer,
 });
-
-const mousePosition = {
-  x: 12,
-  y: 7,
-};
 
 const mouseController = createMouseController({
   element: mouseFood,
@@ -83,13 +99,13 @@ const foodController = createFoodController({
 
   actor: mouseActor,
 
+  position: mousePosition,
+
   mouseController,
 
   getSnake: () => gameState.getSnake(),
 
   isGameOver: () => gameState.isGameOver(),
-
-  initialPosition: mousePosition,
 });
 
 /* =========================================================
@@ -339,13 +355,16 @@ gameLoop = createGameLoop({
    INICIALIZAÇÃO
    ========================================================= */
 
-foodController.updatePosition();
-
 const initialDirection = directionController.getDirection();
 
 snakeRenderer.create(gameState.getSnake(), initialDirection);
 
-mouseController.update(gameState.getSnake()[0]);
+/*
+ * O primeiro rato da partida nasce
+ * em uma célula livre aleatória.
+ */
+
+foodController.spawnInitial();
 
 snakeRenderer.render(
   gameState.getRenderSnake(),

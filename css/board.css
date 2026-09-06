@@ -4,65 +4,35 @@
    ========================================================= */
 
 /* =========================================================
-   SHELL
-   ========================================================= */
-
-.game-shell {
-  position: relative;
-
-  width: 100%;
-  min-height: 100svh;
-
-  display: flex;
-  align-items: center;
-  justify-content: center;
-
-  padding: 40px;
-}
-
-/* =========================================================
-   TABULEIRO
+   BOARD
    ========================================================= */
 
 .game-board {
   position: relative;
 
-  --board-size: min(78vw, 78vh, 760px);
+  grid-row: 3;
 
-  --cell-size: calc(var(--board-size) / 16);
+  width: var(--board-width);
+  height: var(--board-height);
 
-  /*
-   * Espaço entre o último quadrado
-   * do grid e a moldura rosa.
-   */
-
-  --board-frame-gap: 5px;
-
-  /*
-   * Espessura da moldura.
-   */
-
-  --board-frame-width: 10px;
-
-  width: var(--board-size);
-
-  height: var(--board-size);
+  align-self: end;
+  justify-self: center;
 
   flex: 0 0 auto;
-
-  /*
-   * A área jogável permanece
-   * completamente quadrada.
-   */
-
-  border: 0;
-  border-radius: 0;
 
   background-color: var(--color-board);
 
   background-image:
-    linear-gradient(to right, var(--color-grid) 1px, transparent 1px),
-    linear-gradient(to bottom, var(--color-grid) 1px, transparent 1px),
+    linear-gradient(
+      to right,
+      var(--color-grid) 1px,
+      transparent 1px
+    ),
+    linear-gradient(
+      to bottom,
+      var(--color-grid) 1px,
+      transparent 1px
+    ),
     radial-gradient(
       circle at 0 0,
       rgba(70, 210, 255, 0.58) 1.15px,
@@ -80,7 +50,7 @@
 }
 
 /* =========================================================
-   MOLDURA EXTERNA
+   FRAME
    ========================================================= */
 
 .game-board::after {
@@ -88,24 +58,12 @@
 
   position: absolute;
 
-  /*
-   * 5 px de espaço livre
-   * +
-   * 10 px da própria moldura.
-   */
+  inset: calc(-1 * var(--board-frame-outset));
 
-  inset: calc(-1 * (var(--board-frame-gap) + var(--board-frame-width)));
-
-  border: var(--board-frame-width) solid var(--color-board-border);
-
-  /*
-   * Raio propositalmente próximo
-   * da espessura da borda.
-   *
-   * Resultado:
-   * exterior arredondado,
-   * interior praticamente quadrado.
-   */
+  border:
+    var(--board-frame-width)
+    solid
+    var(--color-board-border);
 
   border-radius: 12px;
 
@@ -115,10 +73,34 @@
 }
 
 /* =========================================================
+   INTERNAL GLOW
+   ========================================================= */
+
+.game-board::before {
+  content: "";
+
+  position: absolute;
+
+  inset: 0;
+
+  background:
+    radial-gradient(
+      circle at 50% 50%,
+      rgba(41, 92, 255, 0.035),
+      transparent 68%
+    );
+
+  pointer-events: none;
+
+  z-index: 0;
+}
+
+/* =========================================================
    BOX MODEL
    ========================================================= */
 
 .game-board,
+.game-board::before,
 .game-board::after {
   box-sizing: border-box;
 }

@@ -7,17 +7,15 @@
    - encontrar células livres;
    - escolher uma nova posição;
    - atualizar a posição visual;
+   - controlar o primeiro spawn;
    - controlar consumo e respawn.
 
-   O comportamento e as expressões do rato continuam
-   pertencendo ao mouseController.
-
-   O objeto de posição é compartilhado entre este módulo
-   e o mouseController para manter lógica e comportamento
-   perfeitamente sincronizados.
+   O foodController e o mouseController compartilham
+   exatamente o mesmo objeto de posição.
    ========================================================= */
 
-import { GRID_SIZE } from "./config.js";
+import { GRID_COLUMNS, GRID_ROWS } from "./config.js";
+
 import { isSamePosition } from "./collision.js";
 
 /* =========================================================
@@ -27,18 +25,11 @@ import { isSamePosition } from "./collision.js";
 export function createFoodController({
   element,
   actor,
+  position,
   mouseController,
   getSnake,
   isGameOver,
-  initialPosition,
 }) {
-  /*
-   * O foodController e o mouseController compartilham
-   * exatamente o mesmo objeto de posição.
-   */
-
-  const position = initialPosition;
-
   /* =======================================================
      POSIÇÃO
      ======================================================= */
@@ -70,8 +61,8 @@ export function createFoodController({
   function getFreeCells() {
     const freeCells = [];
 
-    for (let y = 0; y < GRID_SIZE; y += 1) {
-      for (let x = 0; x < GRID_SIZE; x += 1) {
+    for (let y = 0; y < GRID_ROWS; y += 1) {
+      for (let x = 0; x < GRID_COLUMNS; x += 1) {
         const candidate = {
           x,
           y,
@@ -87,25 +78,57 @@ export function createFoodController({
   }
 
   /* =======================================================
-     NOVA POSIÇÃO
+     POSIÇÃO ALEATÓRIA
      ======================================================= */
 
   function moveToRandomCell() {
     const freeCells = getFreeCells();
 
     if (freeCells.length === 0) {
-      return;
+      return false;
     }
 
     const randomIndex = Math.floor(Math.random() * freeCells.length);
 
     const nextPosition = freeCells[randomIndex];
 
+    /*
+     * Não substituímos o objeto.
+     *
+     * Alteramos suas propriedades para
+     * preservar a mesma referência usada
+     * pelo mouseController.
+     */
+
     position.x = nextPosition.x;
 
     position.y = nextPosition.y;
 
     updatePosition();
+
+    return true;
+  }
+
+  /* =======================================================
+     PRIMEIRO SPAWN
+     ======================================================= */
+
+  function spawnInitial() {
+    if (isGameOver()) {
+      return false;
+    }
+
+    const spawned = moveToRandomCell();
+
+    if (!spawned) {
+      return false;
+    }
+
+    const snake = getSnake();
+
+    mouseController.update(snake[0]);
+
+    return true;
   }
 
   /* =======================================================
@@ -118,12 +141,11 @@ export function createFoodController({
     }
 
     /*
-     * Cancela somente animações criadas pela
-     * Web Animations API.
+     * Cancela somente animações criadas
+     * pela Web Animations API.
      *
-     * Animações CSS como mouse-provoke e
-     * mouse-scared pertencem ao stylesheet
-     * e não devem ser canceladas aqui.
+     * As animações CSS do rato continuam
+     * pertencendo ao stylesheet.
      */
 
     actor
@@ -156,13 +178,6 @@ export function createFoodController({
       return;
     }
 
-    /*
-     * Retiramos temporariamente a animação CSS.
-     * O reflow separa os dois estados e faz o
-     * navegador iniciar novamente a animação
-     * correspondente à expressão atual.
-     */
-
     actor.style.animation = "none";
 
     void actor.offsetWidth;
@@ -182,7 +197,11 @@ export function createFoodController({
     const snake = getSnake();
 
     if (!actor) {
-      moveToRandomCell();
+      const spawned = moveToRandomCell();
+
+      if (!spawned) {
+        return;
+      }
 
       mouseController.update(snake[0]);
 
@@ -191,13 +210,11 @@ export function createFoodController({
 
     actor.style.visibility = "hidden";
 
-    moveToRandomCell();
+    const spawned = moveToRandomCell();
 
-    /*
-     * Como a posição é compartilhada,
-     * o mouseController calcula a expressão
-     * usando imediatamente a nova célula.
-     */
+    if (!spawned) {
+      return;
+    }
 
     mouseController.update(snake[0]);
 
@@ -271,6 +288,7 @@ export function createFoodController({
 
   return {
     getPosition,
+    spawnInitial,
     updatePosition,
     consumeVisually,
   };

@@ -4,43 +4,107 @@
    ========================================================= */
 
 /* =========================================================
+   FONT
+   ========================================================= */
+
+@import url("https://fonts.googleapis.com/css2?family=Orbitron:wght@500;600;700;800&display=swap");
+
+/* =========================================================
    TOKENS
    ========================================================= */
 
 :root {
-  /* Background */
-
   --color-background: #050817;
 
-  /* Board */
+  --color-panel: #101833;
+  --color-panel-border: rgba(89, 116, 211, 0.42);
+  --color-panel-highlight: rgba(111, 137, 233, 0.1);
+
+  --color-interface: #f7f8ff;
+  --color-interface-muted: #8f9aba;
 
   --color-board: #080c20;
   --color-board-border: #ff3d9a;
   --color-grid: rgba(75, 123, 255, 0.11);
 
-  /* Verdyka */
-
   --color-verdyka: #39ff6a;
   --color-verdyka-highlight: #8cff63;
   --color-verdyka-shadow: #13c94d;
 
-  /* Mouse */
-
   --color-mouse: #9da5b7;
   --color-mouse-light: #d5dae4;
   --color-mouse-shadow: #646d82;
-
   --color-mouse-ear: #f38aa7;
   --color-mouse-ear-light: #ffb1c5;
   --color-mouse-nose: #ff719d;
 
-  /* Layout */
+  /* =======================================================
+     GRID
+     ======================================================= */
 
-  --page-padding: 24px;
+  --grid-columns: 12;
+  --grid-rows: 22;
 
-  --board-size: min(78vw, 78vh, 760px);
+  /* =======================================================
+     LAYOUT
+     ======================================================= */
 
-  --cell-size: calc(var(--board-size) / 24);
+  --screen-gap: clamp(8px, 2.8vw, 14px);
+
+  --board-frame-gap: 5px;
+  --board-frame-width: 10px;
+
+  --board-frame-outset: calc(var(--board-frame-gap) + var(--board-frame-width));
+
+  --panel-height: clamp(108px, 14svh, 126px);
+
+  --panel-padding-inline: clamp(16px, 5vw, 24px);
+
+  --panel-padding-block: clamp(14px, 2.5svh, 18px);
+
+  --minimum-stage-gap: clamp(10px, 2svh, 18px);
+
+  /* =======================================================
+     LARGURA DISPONÍVEL
+     ======================================================= */
+
+  --board-width-from-screen: calc(
+    100vw - ((var(--screen-gap) + var(--board-frame-outset)) * 2)
+  );
+
+  /* =======================================================
+     ALTURA DISPONÍVEL
+     ======================================================= */
+
+  --board-height-available: calc(
+    100svh - var(--screen-gap) - var(--panel-height) -
+      var(--minimum-stage-gap) - var(--screen-gap) - var(--board-frame-outset)
+  );
+
+  /* =======================================================
+     LARGURA DERIVADA DA ALTURA
+
+     A proporção do tabuleiro é determinada
+     exclusivamente pelo grid 12 × 22.
+     ======================================================= */
+
+  --board-width-from-height: calc(
+    var(--board-height-available) * var(--grid-columns) / var(--grid-rows)
+  );
+
+  /* =======================================================
+     DIMENSÕES FINAIS DO TABULEIRO
+     ======================================================= */
+
+  --board-width: min(
+    var(--board-width-from-screen),
+    var(--board-width-from-height),
+    430px
+  );
+
+  --cell-size: calc(var(--board-width) / var(--grid-columns));
+
+  --board-height: calc(var(--cell-size) * var(--grid-rows));
 }
 
 /* =========================================================
@@ -69,7 +133,20 @@ body {
 
   overflow: hidden;
 
-  background: var(--color-background);
+  background: radial-gradient(
+    circle at 50% 18%,
+    #0a1025 0%,
+    #070b1c 34%,
+    var(--color-background) 68%
+  );
+
+  color: var(--color-interface);
+
+  font-family: "Orbitron", system-ui, sans-serif;
+
+  -webkit-font-smoothing: antialiased;
+
+  text-rendering: geometricPrecision;
 }
 
 /* =========================================================
@@ -81,7 +158,285 @@ body {
   height: 100svh;
 
   display: grid;
-  place-items: center;
 
-  padding: var(--page-padding);
+  place-items: stretch center;
+
+  padding: var(--screen-gap) calc(var(--screen-gap) + var(--board-frame-outset))
+    calc(var(--screen-gap) + var(--board-frame-outset));
+}
+
+/* =========================================================
+   GAME STAGE
+   ========================================================= */
+
+.game-stage {
+  width: var(--board-width);
+  height: 100%;
+
+  display: grid;
+
+  grid-template-rows:
+    var(--panel-height)
+    minmax(var(--minimum-stage-gap), 1fr)
+    var(--board-height);
+
+  min-height: 0;
+}
+
+/* =========================================================
+   HUD
+   ========================================================= */
+
+.game-hud {
+  position: relative;
+
+  width: 100%;
+  height: 100%;
+
+  padding: var(--panel-padding-block) var(--panel-padding-inline);
+
+  display: grid;
+
+  grid-template-rows:
+    auto
+    1fr;
+
+  align-items: start;
+
+  border: 1px solid var(--color-panel-border);
+
+  border-radius: 12px;
+
+  background:
+    linear-gradient(
+      180deg,
+      var(--color-panel-highlight) 0%,
+      rgba(255, 255, 255, 0) 38%
+    ),
+    var(--color-panel);
+
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.04),
+    0 10px 30px rgba(0, 0, 0, 0.14);
+
+  overflow: hidden;
+
+  pointer-events: none;
+
+  user-select: none;
+}
+
+.game-hud::after {
+  content: "";
+
+  position: absolute;
+
+  left: 18%;
+  right: 18%;
+  bottom: 0;
+
+  height: 1px;
+
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(86, 117, 255, 0.34),
+    transparent
+  );
+
+  pointer-events: none;
+}
+
+/* =========================================================
+   IDENTIDADE
+   ========================================================= */
+
+.game-identity {
+  display: grid;
+
+  justify-items: center;
+
+  row-gap: clamp(4px, 0.8svh, 6px);
+}
+
+.game-title {
+  margin: 0;
+
+  padding-left: 0.14em;
+
+  font-size: clamp(22px, 6.4vw, 32px);
+
+  font-weight: 800;
+
+  line-height: 0.95;
+
+  letter-spacing: 0.14em;
+
+  text-align: center;
+
+  text-transform: uppercase;
+
+  color: var(--color-interface);
+
+  text-shadow:
+    0 0 10px rgba(255, 61, 154, 0.16),
+    0 0 18px rgba(78, 108, 255, 0.12);
+}
+
+/* =========================================================
+   MODE
+   ========================================================= */
+
+.game-mode {
+  margin: 0;
+
+  display: flex;
+
+  align-items: center;
+
+  justify-content: center;
+
+  gap: 6px;
+
+  font-size: clamp(7px, 1.8vw, 9px);
+
+  font-weight: 600;
+
+  line-height: 1;
+
+  letter-spacing: 0.16em;
+
+  text-transform: uppercase;
+}
+
+.game-mode__label {
+  color: var(--color-interface-muted);
+}
+
+.game-mode__separator {
+  color: rgba(247, 248, 255, 0.36);
+}
+
+.game-mode__value {
+  font: inherit;
+
+  color: var(--color-interface);
+}
+
+/* =========================================================
+   STATS
+   ========================================================= */
+
+.game-stats {
+  align-self: end;
+
+  width: 100%;
+
+  display: grid;
+
+  grid-template-columns:
+    minmax(0, 1fr)
+    minmax(0, 1fr);
+
+  align-items: end;
+
+  column-gap: 18px;
+}
+
+.game-stat {
+  min-width: 0;
+
+  display: grid;
+
+  justify-items: start;
+
+  row-gap: 3px;
+}
+
+.game-stat--high-score {
+  justify-items: end;
+
+  text-align: right;
+}
+
+.game-stat__label {
+  font-size: clamp(7px, 1.9vw, 9px);
+
+  font-weight: 700;
+
+  line-height: 1;
+
+  letter-spacing: 0.15em;
+
+  text-transform: uppercase;
+
+  color: var(--color-interface-muted);
+}
+
+.game-stat__value {
+  font-size: clamp(11px, 3vw, 14px);
+
+  font-weight: 600;
+
+  line-height: 1;
+
+  letter-spacing: 0.09em;
+
+  color: var(--color-interface);
+}
+
+/* =========================================================
+   TELAS MUITO ESTREITAS
+   ========================================================= */
+
+@media (max-width: 300px) {
+  :root {
+    --panel-padding-inline: 12px;
+  }
+
+  .game-title {
+    font-size: 20px;
+  }
+
+  .game-stats {
+    column-gap: 10px;
+  }
+
+  .game-stat__label {
+    font-size: 6px;
+  }
+
+  .game-stat__value {
+    font-size: 10px;
+  }
+}
+
+/* =========================================================
+   TELAS MUITO BAIXAS
+   ========================================================= */
+
+@media (max-height: 560px) {
+  :root {
+    --panel-height: 92px;
+
+    --panel-padding-block: 10px;
+
+    --minimum-stage-gap: 8px;
+  }
+
+  .game-title {
+    font-size: 20px;
+  }
+
+  .game-mode {
+    font-size: 6px;
+  }
+
+  .game-stat__label {
+    font-size: 6px;
+  }
+
+  .game-stat__value {
+    font-size: 10px;
+  }
 }
