@@ -1,18 +1,13 @@
 /* =========================================================
    JARAKA — SNAKE
-   Orquestrador do renderer da cobra
 
-   Responsabilidades:
-   - criação do SVG do corpo;
-   - coordenação da renderização;
-   - integração entre path, cabeça e alimentação;
-   - desenvolvimento progressivo da cauda;
-   - manutenção da API pública do renderer.
-
-   Módulos:
-   - ./snake/path.js
-   - ./snake/head.js
-   - ./snake/eating.js
+   Renderer híbrido:
+   - corpo principal em SVG;
+   - região de taper em Canvas;
+   - matemática morfológica preservada;
+   - superfície preenchida, sem strokes segmentados;
+   - amostragem proporcional global REMOVIDA;
+   - superfície ancorada na geometria real do path.
    ========================================================= */
 
 import { GRID_SIZE } from "./game/config.js";
@@ -47,19 +42,13 @@ import {
 const SVG_NAMESPACE = "http://www.w3.org/2000/svg";
 
 /* =========================================================
-   CAUDA — RENDERER
+   CORPO
    ========================================================= */
-
-const MAX_TAIL_SEGMENT_COUNT = 40;
-
-const MIN_TAIL_SEGMENT_COUNT = 8;
-
-const TARGET_TAIL_SEGMENT_LENGTH = 0.175;
 
 const BODY_WIDTH = 0.92;
 
 /* =========================================================
-   MORFOLOGIA DA CAUDA
+   MORFOLOGIA APROVADA
    ========================================================= */
 
 const TAIL_LENGTH_PER_GROWTH = 1;
@@ -70,6 +59,20 @@ const MIN_TAIL_END_WIDTH = 0.28;
 
 const MIN_VISIBLE_GROWTH = 0.002;
 
+/* =========================================================
+   GEOMETRIA
+   ========================================================= */
+
+const MIN_VECTOR_LENGTH = 0.000001;
+
+const CURVE_JOIN_THRESHOLD = 0.002;
+
+const DISTANCE_EPSILON = 0.000001;
+
+/* =========================================================
+   RENDERER
+   ========================================================= */
+
 export function createSnakeRenderer({ layer }) {
   let bodySvg = null;
 
@@ -79,9 +82,13 @@ export function createSnakeRenderer({ layer }) {
 
   let bodyHighlightPath = null;
 
-  let tailGroup = null;
+  let tailCanvas = null;
 
-  let tailSegments = [];
+  let tailContext = null;
+
+  let tailColor = "";
+
+  let tailResizeObserver = null;
 
   let headElement = null;
 
@@ -91,16 +98,26 @@ export function createSnakeRenderer({ layer }) {
 
   let initialSnakeLength = 0;
 
-  let activeTailSegmentCount = 0;
+  let canvasReady = false;
 
-  let lastProfileKey = "";
+  /*
+   * Buffers reutilizados.
+   *
+   * Nesta versão eles não possuem tamanho fixo,
+   * porque a quantidade de pontos passa a ser
+   * determinada pela topologia real do path.
+   *
+   * O Array em si é reutilizado a cada frame.
+   */
 
-  const boundaryPoints = new Array(MAX_TAIL_SEGMENT_COUNT + 1);
+  const centerPoints = [];
 
-  const middlePoints = new Array(MAX_TAIL_SEGMENT_COUNT);
+  const boundaryWidths = [];
+
+  const segmentDirections = [];
 
   /* =======================================================
-     PATH SVG
+     SVG — CORPO
      ======================================================= */
 
   function createBodyPath(className) {
@@ -112,35 +129,6 @@ export function createSnakeRenderer({ layer }) {
 
     return path;
   }
-
-  /* =======================================================
-     CAUDA — ESTRUTURA
-     ======================================================= */
-
-  function createTail() {
-    const group = document.createElementNS(SVG_NAMESPACE, "g");
-
-    group.classList.add("snake-tail");
-
-    const segments = [];
-
-    for (let index = 0; index < MAX_TAIL_SEGMENT_COUNT; index += 1) {
-      const path = createBodyPath("snake-tail-segment");
-
-      group.appendChild(path);
-
-      segments.push(path);
-    }
-
-    return {
-      group,
-      segments,
-    };
-  }
-
-  /* =======================================================
-     CORPO SVG
-     ======================================================= */
 
   function createBodySvg() {
     const svg = document.createElementNS(SVG_NAMESPACE, "svg");
@@ -159,9 +147,7 @@ export function createSnakeRenderer({ layer }) {
 
     const highlightPath = createBodyPath("snake-body-highlight");
 
-    const tail = createTail();
-
-    svg.append(depthPath, mainPath, highlightPath, tail.group);
+    svg.append(depthPath, mainPath, highlightPath);
 
     layer.appendChild(svg);
 
@@ -172,14 +158,95 @@ export function createSnakeRenderer({ layer }) {
     bodyPath = mainPath;
 
     bodyHighlightPath = highlightPath;
+  }
 
-    tailGroup = tail.group;
+  /* =======================================================
+     CANVAS — COR
+     ======================================================= */
 
-    tailSegments = tail.segments;
+  function resolveTailColor() {
+    const styles = getComputedStyle(layer);
 
-    activeTailSegmentCount = 0;
+    const color = styles.getPropertyValue("--color-verdyka").trim();
 
-    lastProfileKey = "";
+    tailColor = color || "#39ff6a";
+  }
+
+  /* =======================================================
+     CANVAS — TAMANHO
+     ======================================================= */
+
+  function resizeTailCanvas() {
+    if (!tailCanvas || !tailContext) {
+      return;
+    }
+
+    const rect = layer.getBoundingClientRect();
+
+    if (rect.width <= 0 || rect.height <= 0) {
+      canvasReady = false;
+
+      return;
+    }
+
+    const pixelRatio = Math.max(1, window.devicePixelRatio || 1);
+
+    const pixelWidth = Math.max(1, Math.round(rect.width * pixelRatio));
+
+    const pixelHeight = Math.max(1, Math.round(rect.height * pixelRatio));
+
+    if (tailCanvas.width !== pixelWidth || tailCanvas.height !== pixelHeight) {
+      tailCanvas.width = pixelWidth;
+
+      tailCanvas.height = pixelHeight;
+    }
+
+    tailContext.setTransform(
+      pixelWidth / GRID_SIZE,
+      0,
+      0,
+      pixelHeight / GRID_SIZE,
+      0,
+      0,
+    );
+
+    canvasReady = true;
+  }
+
+  function createTailCanvas() {
+    const canvas = document.createElement("canvas");
+
+    canvas.classList.add("snake-tail-canvas");
+
+    canvas.setAttribute("aria-hidden", "true");
+
+    layer.appendChild(canvas);
+
+    tailCanvas = canvas;
+
+    tailContext = canvas.getContext("2d", {
+      alpha: true,
+    });
+
+    resolveTailColor();
+
+    resizeTailCanvas();
+
+    if (typeof ResizeObserver !== "undefined") {
+      tailResizeObserver = new ResizeObserver(() => {
+        resizeTailCanvas();
+      });
+
+      tailResizeObserver.observe(layer);
+    }
+  }
+
+  function clearTailCanvas() {
+    if (!tailContext || !canvasReady) {
+      return;
+    }
+
+    tailContext.clearRect(0, 0, GRID_SIZE, GRID_SIZE);
   }
 
   /* =======================================================
@@ -187,11 +254,19 @@ export function createSnakeRenderer({ layer }) {
      ======================================================= */
 
   function create(snake, direction) {
+    if (tailResizeObserver) {
+      tailResizeObserver.disconnect();
+
+      tailResizeObserver = null;
+    }
+
     layer.replaceChildren();
 
     initialSnakeLength = snake.length;
 
     createBodySvg();
+
+    createTailCanvas();
 
     const head = createHead(layer);
 
@@ -228,21 +303,50 @@ export function createSnakeRenderer({ layer }) {
     return Math.max(minimum, Math.min(value, maximum));
   }
 
-  function clearTail() {
-    for (let index = 0; index < activeTailSegmentCount; index += 1) {
-      tailSegments[index]?.setAttribute("d", "");
+  function normalizeVector(x, y) {
+    const length = Math.hypot(x, y);
+
+    if (length <= MIN_VECTOR_LENGTH) {
+      return null;
     }
 
-    activeTailSegmentCount = 0;
+    return {
+      x: x / length,
 
-    lastProfileKey = "";
+      y: y / length,
+    };
   }
 
-  function clearUnusedTailSegments(fromIndex) {
-    for (let index = fromIndex; index < activeTailSegmentCount; index += 1) {
-      tailSegments[index]?.setAttribute("d", "");
+  function getNormal(direction) {
+    return {
+      x: -direction.y,
+
+      y: direction.x,
+    };
+  }
+
+  function getOffsetPoint(point, normal, distance) {
+    return {
+      x: point.x + normal.x * distance,
+
+      y: point.y + normal.y * distance,
+    };
+  }
+
+  function isSamePoint(first, second) {
+    if (!first || !second) {
+      return false;
     }
+
+    return (
+      Math.abs(first.x - second.x) <= DISTANCE_EPSILON &&
+      Math.abs(first.y - second.y) <= DISTANCE_EPSILON
+    );
   }
+
+  /* =======================================================
+     SVG — VISIBILIDADE
+     ======================================================= */
 
   function resetBodyDash() {
     const paths = [bodyDepthPath, bodyPath, bodyHighlightPath];
@@ -261,7 +365,7 @@ export function createSnakeRenderer({ layer }) {
   function setBodyVisibleLength(visibleLength, totalLength) {
     const hiddenLength = totalLength + 2;
 
-    const dash = `${visibleLength} ` + `${hiddenLength}`;
+    const dash = `${visibleLength} ${hiddenLength}`;
 
     const paths = [bodyDepthPath, bodyPath, bodyHighlightPath];
 
@@ -293,16 +397,12 @@ export function createSnakeRenderer({ layer }) {
   }
 
   /* =======================================================
-     COMPRIMENTO DA REGIÃO DA CAUDA
+     MORFOLOGIA
      ======================================================= */
 
   function getTailLength(totalLength, visualGrowth) {
     return Math.min(totalLength, visualGrowth * TAIL_LENGTH_PER_GROWTH);
   }
-
-  /* =======================================================
-     LARGURA FINAL
-     ======================================================= */
 
   function getTailEndWidth(visualGrowth) {
     return Math.max(
@@ -310,10 +410,6 @@ export function createSnakeRenderer({ layer }) {
       BODY_WIDTH - visualGrowth * TAIL_WIDTH_LOSS_PER_GROWTH,
     );
   }
-
-  /* =======================================================
-     PERFIL DE LARGURA
-     ======================================================= */
 
   function getTailWidth(progress, visualGrowth) {
     const normalized = clamp(progress, 0, 1);
@@ -324,115 +420,351 @@ export function createSnakeRenderer({ layer }) {
   }
 
   /* =======================================================
-     RESOLUÇÃO
+     BUFFER — PONTO ESTRUTURAL
      ======================================================= */
 
-  function getTailSegmentCount(tailLength) {
-    const proportionalCount = Math.ceil(
-      tailLength / TARGET_TAIL_SEGMENT_LENGTH,
-    );
-
-    return clamp(
-      proportionalCount,
-      MIN_TAIL_SEGMENT_COUNT,
-      MAX_TAIL_SEGMENT_COUNT,
-    );
-  }
-
-  /* =======================================================
-     PERFIL DOS SEGMENTOS
-     ======================================================= */
-
-  function updateTailProfile(segmentCount, visualGrowth) {
-    const profileKey = `${segmentCount}:` + visualGrowth.toFixed(4);
-
-    if (profileKey === lastProfileKey) {
+  function pushCenterPoint(point, distance) {
+    if (!point) {
       return;
     }
 
-    let previousWidth = BODY_WIDTH;
+    const previous = centerPoints[centerPoints.length - 1];
 
-    for (let index = 0; index < segmentCount; index += 1) {
-      const progress = segmentCount > 1 ? index / (segmentCount - 1) : 1;
-
-      const calculatedWidth = getTailWidth(progress, visualGrowth);
-
-      const width = Math.min(previousWidth, calculatedWidth);
-
-      tailSegments[index].setAttribute("stroke-width", width);
-
-      previousWidth = width;
-    }
-
-    lastProfileKey = profileKey;
-  }
-
-  /* =======================================================
-     AMOSTRAGEM
-     ======================================================= */
-
-  function sampleTail(pathGeometry, tailStart, tailLength, segmentCount) {
     /*
-     * Nenhuma consulta ao SVG.
-     *
-     * Tudo vem da centerline matemática
-     * construída em path.js.
+     * Se dois trechos da geometria
+     * compartilham exatamente o mesmo
+     * ponto, mantemos apenas um nó.
      */
 
-    for (let index = 0; index <= segmentCount; index += 1) {
-      const ratio = index / segmentCount;
+    if (previous && isSamePoint(previous, point)) {
+      previous.distance = Math.max(previous.distance, distance);
 
-      const sampleLength = tailStart + tailLength * ratio;
-
-      boundaryPoints[index] = sampleRoundedPathAtLength(
-        pathGeometry,
-        sampleLength,
-      );
+      return;
     }
 
-    for (let index = 0; index < segmentCount; index += 1) {
-      const ratio = (index + 0.5) / segmentCount;
-
-      const sampleLength = tailStart + tailLength * ratio;
-
-      middlePoints[index] = sampleRoundedPathAtLength(
-        pathGeometry,
-        sampleLength,
-      );
-    }
+    centerPoints.push({
+      x: point.x,
+      y: point.y,
+      distance,
+    });
   }
 
   /* =======================================================
-     DESENHO
+     AMOSTRAGEM ESTRUTURAL
      ======================================================= */
 
-  function drawTail(segmentCount) {
-    for (let index = 0; index < segmentCount; index += 1) {
-      const startPoint = boundaryPoints[index];
+  function buildStructuralTailPoints(pathGeometry, tailStart) {
+    centerPoints.length = 0;
 
-      const middlePoint = middlePoints[index];
+    const segments = pathGeometry?.segments ?? [];
 
-      const endPoint = boundaryPoints[index + 1];
+    if (segments.length === 0) {
+      return 0;
+    }
 
-      if (!startPoint || !middlePoint || !endPoint) {
-        tailSegments[index].setAttribute("d", "");
+    /*
+     * O primeiro ponto é o único ponto
+     * realmente "cortado" pela posição
+     * dinâmica de tailStart.
+     *
+     * Todo o restante passa a vir da
+     * própria estrutura do path.
+     */
+
+    const startPoint = sampleRoundedPathAtLength(pathGeometry, tailStart);
+
+    pushCenterPoint(startPoint, tailStart);
+
+    for (
+      let segmentIndex = 0;
+      segmentIndex < segments.length;
+      segmentIndex += 1
+    ) {
+      const segment = segments[segmentIndex];
+
+      /*
+       * Segmentos completamente antes
+       * do início da cauda não interessam.
+       */
+
+      if (segment.endLength <= tailStart + DISTANCE_EPSILON) {
+        continue;
+      }
+
+      /* ===================================================
+         RETA
+         =================================================== */
+
+      if (segment.type === "line") {
+        /*
+         * Para uma reta não precisamos
+         * criar subdivisões artificiais.
+         *
+         * O ponto final pertence à
+         * geometria real da cobra.
+         */
+
+        pushCenterPoint(segment.end, segment.endLength);
 
         continue;
       }
 
-      tailSegments[index].setAttribute(
-        "d",
-        `M ${startPoint.x} ${startPoint.y} ` +
-          `L ${middlePoint.x} ${middlePoint.y} ` +
-          `L ${endPoint.x} ${endPoint.y}`,
+      /* ===================================================
+         CURVA QUADRÁTICA
+         =================================================== */
+
+      if (segment.type === "quadratic") {
+        const samples = segment.samples ?? [];
+
+        /*
+         * Estes samples já são criados
+         * pelo próprio path.js para
+         * representar a curva.
+         *
+         * Não inventamos uma nova grade.
+         */
+
+        for (
+          let sampleIndex = 1;
+          sampleIndex < samples.length;
+          sampleIndex += 1
+        ) {
+          const sample = samples[sampleIndex];
+
+          const globalDistance = segment.startLength + sample.length;
+
+          /*
+           * Samples anteriores ao tailStart
+           * ficam fora da região Canvas.
+           */
+
+          if (globalDistance <= tailStart + DISTANCE_EPSILON) {
+            continue;
+          }
+
+          pushCenterPoint(sample.point, globalDistance);
+        }
+
+        /*
+         * Fallback defensivo:
+         * garante que o endpoint real
+         * da curva esteja presente.
+         */
+
+        pushCenterPoint(segment.end, segment.endLength);
+      }
+    }
+
+    return centerPoints.length;
+  }
+
+  /* =======================================================
+     LARGURAS E DIREÇÕES
+     ======================================================= */
+
+  function prepareTailGeometry(tailStart, tailLength, visualGrowth) {
+    const pointCount = centerPoints.length;
+
+    boundaryWidths.length = pointCount;
+
+    segmentDirections.length = Math.max(0, pointCount - 1);
+
+    let previousWidth = BODY_WIDTH;
+
+    for (let index = 0; index < pointCount; index += 1) {
+      const point = centerPoints[index];
+
+      const progress =
+        tailLength <= DISTANCE_EPSILON
+          ? 1
+          : clamp((point.distance - tailStart) / tailLength, 0, 1);
+
+      let width =
+        index === 0 ? BODY_WIDTH : getTailWidth(progress, visualGrowth);
+
+      /*
+       * Invariante morfológico:
+       *
+       * indo do corpo para a ponta,
+       * a largura jamais aumenta.
+       */
+
+      width = Math.min(previousWidth, width);
+
+      boundaryWidths[index] = width;
+
+      previousWidth = width;
+    }
+
+    for (let index = 0; index < pointCount - 1; index += 1) {
+      const start = centerPoints[index];
+
+      const end = centerPoints[index + 1];
+
+      segmentDirections[index] = normalizeVector(
+        end.x - start.x,
+        end.y - start.y,
       );
     }
+  }
 
-    if (segmentCount < activeTailSegmentCount) {
-      clearUnusedTailSegments(segmentCount);
+  /* =======================================================
+     SUPERFÍCIE — SEGMENTOS
+     ======================================================= */
+
+  function buildSurfaceSegments() {
+    const segmentCount = centerPoints.length - 1;
+
+    if (segmentCount <= 0) {
+      return;
     }
 
-    activeTailSegmentCount = segmentCount;
+    tailContext.beginPath();
+
+    for (let index = 0; index < segmentCount; index += 1) {
+      const direction = segmentDirections[index];
+
+      if (!direction) {
+        continue;
+      }
+
+      const start = centerPoints[index];
+
+      const end = centerPoints[index + 1];
+
+      const normal = getNormal(direction);
+
+      const startRadius = boundaryWidths[index] / 2;
+
+      const endRadius = boundaryWidths[index + 1] / 2;
+
+      const startLeft = getOffsetPoint(start, normal, startRadius);
+
+      const startRight = getOffsetPoint(start, normal, -startRadius);
+
+      const endLeft = getOffsetPoint(end, normal, endRadius);
+
+      const endRight = getOffsetPoint(end, normal, -endRadius);
+
+      tailContext.moveTo(startLeft.x, startLeft.y);
+
+      tailContext.lineTo(endLeft.x, endLeft.y);
+
+      tailContext.lineTo(endRight.x, endRight.y);
+
+      tailContext.lineTo(startRight.x, startRight.y);
+
+      tailContext.closePath();
+    }
+
+    tailContext.fill();
+  }
+
+  /* =======================================================
+     SUPERFÍCIE — CURVAS
+     ======================================================= */
+
+  function fillCurveJoints() {
+    const segmentCount = centerPoints.length - 1;
+
+    if (segmentCount <= 1) {
+      return;
+    }
+
+    tailContext.beginPath();
+
+    let hasJoint = false;
+
+    for (let index = 1; index < segmentCount; index += 1) {
+      const previousDirection = segmentDirections[index - 1];
+
+      const nextDirection = segmentDirections[index];
+
+      if (!previousDirection || !nextDirection) {
+        continue;
+      }
+
+      const cross =
+        previousDirection.x * nextDirection.y -
+        previousDirection.y * nextDirection.x;
+
+      /*
+       * Retas continuam retas.
+       *
+       * Só existe preenchimento extra
+       * onde há mudança real de direção.
+       */
+
+      if (Math.abs(cross) <= CURVE_JOIN_THRESHOLD) {
+        continue;
+      }
+
+      const point = centerPoints[index];
+
+      const radius = boundaryWidths[index] / 2;
+
+      tailContext.moveTo(point.x + radius, point.y);
+
+      tailContext.arc(point.x, point.y, radius, 0, Math.PI * 2);
+
+      hasJoint = true;
+    }
+
+    if (hasJoint) {
+      tailContext.fill();
+    }
+  }
+
+  /* =======================================================
+     SUPERFÍCIE — PONTA
+     ======================================================= */
+
+  function fillTailTip() {
+    const pointCount = centerPoints.length;
+
+    if (pointCount === 0) {
+      return;
+    }
+
+    const tipIndex = pointCount - 1;
+
+    const tip = centerPoints[tipIndex];
+
+    const tipRadius = boundaryWidths[tipIndex] / 2;
+
+    if (!tip || !Number.isFinite(tipRadius) || tipRadius <= 0) {
+      return;
+    }
+
+    tailContext.beginPath();
+
+    tailContext.arc(tip.x, tip.y, tipRadius, 0, Math.PI * 2);
+
+    tailContext.fill();
+  }
+
+  /* =======================================================
+     DESENHO DA CAUDA
+     ======================================================= */
+
+  function drawTailSurface() {
+    if (!tailContext || !canvasReady) {
+      return;
+    }
+
+    tailContext.clearRect(0, 0, GRID_SIZE, GRID_SIZE);
+
+    if (centerPoints.length < 2) {
+      return;
+    }
+
+    tailContext.fillStyle = tailColor;
+
+    buildSurfaceSegments();
+
+    fillCurveJoints();
+
+    fillTailTip();
   }
 
   /* =======================================================
@@ -440,7 +772,7 @@ export function createSnakeRenderer({ layer }) {
      ======================================================= */
 
   function renderTail(snake, previousSnake, progress, pathGeometry) {
-    if (!bodyPath || !tailGroup || tailSegments.length === 0) {
+    if (!bodyPath || !tailCanvas || !tailContext) {
       return;
     }
 
@@ -449,7 +781,7 @@ export function createSnakeRenderer({ layer }) {
     if (visualGrowth <= MIN_VISIBLE_GROWTH) {
       resetBodyDash();
 
-      clearTail();
+      clearTailCanvas();
 
       return;
     }
@@ -459,7 +791,7 @@ export function createSnakeRenderer({ layer }) {
     if (!Number.isFinite(totalLength) || totalLength <= 0) {
       resetBodyDash();
 
-      clearTail();
+      clearTailCanvas();
 
       return;
     }
@@ -469,22 +801,39 @@ export function createSnakeRenderer({ layer }) {
     if (!Number.isFinite(tailLength) || tailLength <= 0) {
       resetBodyDash();
 
-      clearTail();
+      clearTailCanvas();
 
       return;
     }
 
     const tailStart = Math.max(0, totalLength - tailLength);
 
+    /*
+     * SVG continua responsável pela
+     * região anterior ao taper.
+     */
+
     setBodyVisibleLength(tailStart, totalLength);
 
-    const segmentCount = getTailSegmentCount(tailLength);
+    /*
+     * Mudança principal desta rodada:
+     *
+     * não existe mais segmentCount,
+     * TARGET_TAIL_SEGMENT_LENGTH
+     * ou index / segmentCount.
+     */
 
-    updateTailProfile(segmentCount, visualGrowth);
+    const pointCount = buildStructuralTailPoints(pathGeometry, tailStart);
 
-    sampleTail(pathGeometry, tailStart, tailLength, segmentCount);
+    if (pointCount < 2) {
+      clearTailCanvas();
 
-    drawTail(segmentCount);
+      return;
+    }
+
+    prepareTailGeometry(tailStart, tailLength, visualGrowth);
+
+    drawTailSurface();
   }
 
   /* =======================================================
@@ -612,31 +961,18 @@ export function createSnakeRenderer({ layer }) {
 
   return {
     create,
-
     render,
-
     updateSegmentShapes,
-
     updateHeadDirection,
-
     triggerHeadTurn,
-
     triggerBite,
-
     triggerBiteClose,
-
     triggerChew,
-
     finishChew,
-
     finishBite,
-
     triggerSwallowSegment,
-
     triggerSwallowWave,
-
     triggerGrowthArrival,
-
     triggerEatingSequence,
   };
 }
