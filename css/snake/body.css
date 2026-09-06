@@ -66,15 +66,3 @@
 
   z-index: 2;
 }
-
-/* =========================================================
-   CAMADAS AUXILIARES
-   ========================================================= */
-
-.snake-body-depth,
-.snake-body-highlight {
-  fill: none;
-  stroke: none;
-
-  pointer-events: none;
-}

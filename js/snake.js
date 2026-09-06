@@ -76,11 +76,7 @@ const DISTANCE_EPSILON = 0.000001;
 export function createSnakeRenderer({ layer }) {
   let bodySvg = null;
 
-  let bodyDepthPath = null;
-
   let bodyPath = null;
-
-  let bodyHighlightPath = null;
 
   let tailCanvas = null;
 
@@ -145,23 +141,15 @@ export function createSnakeRenderer({ layer }) {
 
     svg.setAttribute("aria-hidden", "true");
 
-    const depthPath = createBodyPath("snake-body-depth");
-
     const mainPath = createBodyPath("snake-body-path");
 
-    const highlightPath = createBodyPath("snake-body-highlight");
-
-    svg.append(depthPath, mainPath, highlightPath);
+    svg.appendChild(mainPath);
 
     layer.appendChild(svg);
 
     bodySvg = svg;
 
-    bodyDepthPath = depthPath;
-
     bodyPath = mainPath;
-
-    bodyHighlightPath = highlightPath;
   }
 
   /* =======================================================
@@ -397,12 +385,6 @@ export function createSnakeRenderer({ layer }) {
     const previous =
       centerPointCount > 0 ? centerPoints[centerPointCount - 1] : null;
 
-    /*
-     * Se dois trechos da geometria
-     * compartilham exatamente o mesmo
-     * ponto, mantemos apenas um nó.
-     */
-
     if (previous && isSamePoint(previous, point)) {
       previous.distance = Math.max(previous.distance, distance);
 
@@ -410,14 +392,6 @@ export function createSnakeRenderer({ layer }) {
     }
 
     let target = centerPoints[centerPointCount];
-
-    /*
-     * O objeto é criado apenas quando
-     * o buffer precisa crescer.
-     *
-     * Nos frames seguintes ele é
-     * simplesmente sobrescrito.
-     */
 
     if (!target) {
       target = {
@@ -451,15 +425,6 @@ export function createSnakeRenderer({ layer }) {
       return 0;
     }
 
-    /*
-     * O primeiro ponto continua sendo
-     * o único ponto realmente cortado
-     * pela posição dinâmica do taper.
-     *
-     * Todo o restante permanece preso
-     * à topologia estrutural do path.
-     */
-
     const startPoint = sampleRoundedPathAtLength(pathGeometry, tailStart);
 
     pushCenterPoint(startPoint, tailStart);
@@ -475,19 +440,11 @@ export function createSnakeRenderer({ layer }) {
         continue;
       }
 
-      /* ===================================================
-         RETA
-         =================================================== */
-
       if (segment.type === "line") {
         pushCenterPoint(segment.end, segment.endLength);
 
         continue;
       }
-
-      /* ===================================================
-         CURVA QUADRÁTICA
-         =================================================== */
 
       if (segment.type === "quadratic") {
         const samples = segment.samples ?? [];
@@ -543,28 +500,12 @@ export function createSnakeRenderer({ layer }) {
       let width =
         index === 0 ? BODY_WIDTH : getTailWidth(progress, visualGrowth);
 
-      /*
-       * Invariante morfológico:
-       *
-       * indo do corpo para a ponta,
-       * a largura jamais aumenta.
-       */
-
       width = Math.min(previousWidth, width);
 
       boundaryWidths[index] = width;
 
       previousWidth = width;
     }
-
-    /*
-     * As direções deixam de ser objetos
-     * { x, y }.
-     *
-     * X e Y ficam em buffers numéricos
-     * independentes, evitando uma nova
-     * alocação para cada segmento.
-     */
 
     for (let index = 0; index < segmentCount; index += 1) {
       const start = centerPoints[index];
@@ -618,13 +559,6 @@ export function createSnakeRenderer({ layer }) {
       const start = centerPoints[index];
 
       const end = centerPoints[index + 1];
-
-      /*
-       * Normal calculada diretamente.
-       *
-       * Não existe mais criação de
-       * { x, y } para normal ou offsets.
-       */
 
       const normalX = -directionY;
 
@@ -690,13 +624,6 @@ export function createSnakeRenderer({ layer }) {
       const cross =
         previousDirectionX * nextDirectionY -
         previousDirectionY * nextDirectionX;
-
-      /*
-       * Retas continuam retas.
-       *
-       * Só existe preenchimento extra
-       * onde há mudança real de direção.
-       */
 
       if (Math.abs(cross) <= CURVE_JOIN_THRESHOLD) {
         continue;
@@ -811,21 +738,7 @@ export function createSnakeRenderer({ layer }) {
 
     const tailStart = Math.max(0, totalLength - tailLength);
 
-    /*
-     * SVG continua responsável
-     * pela região anterior ao taper.
-     */
-
     setBodyVisibleLength(tailStart, totalLength);
-
-    /*
-     * A estabilidade continua vindo
-     * da amostragem estrutural.
-     *
-     * Não voltamos a distribuir
-     * pontos proporcionalmente pelo
-     * comprimento da cauda.
-     */
 
     const pointCount = buildStructuralTailPoints(pathGeometry, tailStart);
 
@@ -864,12 +777,10 @@ export function createSnakeRenderer({ layer }) {
     const pathGeometry = buildRoundedPathGeometry(points);
 
     /*
-     * Somente o path realmente visível
-     * recebe atualização de "d".
-     *
-     * depth/highlight permanecem criados
-     * por compatibilidade estrutural com
-     * eating.js e CSS, mas têm stroke:none.
+     * O SVG mantém apenas o path visível
+     * do corpo. As antigas camadas auxiliares
+     * foram removidas para reduzir trabalho
+     * de estilo, pintura e composição.
      */
 
     bodyPath.setAttribute("d", pathGeometry.pathData);
